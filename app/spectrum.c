@@ -18,8 +18,8 @@
 #include "finput.h"
 #include <string.h>
 
-#define F_MIN FrequencyBandTable[0].lower
-#define F_MAX FrequencyBandTable[ARRAY_SIZE(FrequencyBandTable) - 1].upper
+#define F_MIN frequencyBandTable[0].lower
+#define F_MAX frequencyBandTable[ARRAY_SIZE(frequencyBandTable) - 1].upper
 
 const uint16_t RSSI_MAX_VALUE = 65535;
 
@@ -52,7 +52,7 @@ SpectrumSettings settings = {
     .rssiTriggerLevel = 150,
     .backlightState = true,
     .listenBw = BK4819_FILTER_BW_WIDE,
-    .modulationType = MOD_FM,
+    .modulationType = MODULATION_FM,
     .delayUS = 1200,
 };
 
@@ -158,7 +158,7 @@ static void ResetPeak() {
 
 bool IsCenterMode() { return settings.scanStepIndex < STEP_1_0kHz; }
 uint8_t GetStepsCount() { return 128 >> settings.stepsCount; }
-uint16_t GetScanStep() { return StepFrequencyTable[settings.scanStepIndex]; }
+uint16_t GetScanStep() { return gStepFrequencyTable[settings.scanStepIndex]; }
 uint32_t GetBW() { return GetStepsCount() * GetScanStep(); }
 uint32_t GetFStart() {
   return IsCenterMode() ? currentFreq - (GetBW() >> 1) : currentFreq;
@@ -275,7 +275,7 @@ static void ToggleRX(bool on) {
     ToggleTX(false);
   }
 
-  BK4819_ToggleGpioOut(BK4819_GPIO0_PIN28_GREEN, on);
+  BK4819_ToggleGpioOut(BK4819_GPIO6_PIN2_GREEN, on);
   BK4819_RX_TurnOn();
 
   ToggleAudio(on);
@@ -528,11 +528,15 @@ static void UpdateFreqChangeStep(bool inc) {
 }
 
 static void ToggleModulation() {
-  if (settings.modulationType == MOD_RAW) {
-    settings.modulationType = MOD_FM;
+#ifdef ENABLE_BYP_RAW_DEMODULATORS
+  if (settings.modulationType == MODULATION_RAW) {
+    settings.modulationType = MODULATION_FM;
   } else {
     ++settings.modulationType;
   }
+#else
+  ++settings.modulationType;
+#endif
   BK4819_SetModulation(settings.modulationType);
   redrawScreen = true;
 }
@@ -645,11 +649,11 @@ static void DrawStatus() {
   }
 #endif
 
-  UI_DisplayBattery(gBatteryDisplayLevel);
+  UI_DisplayBattery(gBatteryDisplayLevel,0);
 }
 
 static void DrawF(uint32_t f) {
-  UI_PrintStringSmallest(modulationTypeOptions[settings.modulationType], 116, 2,
+  UI_PrintStringSmallest(gModulationStr[settings.modulationType], 116, 2,
                          false, true);
   UI_PrintStringSmallest(bwOptions[settings.listenBw], 108, 8, false, true);
 
@@ -670,7 +674,7 @@ static void DrawF(uint32_t f) {
 
   if (currentState == STILL && kbd.current == KEY_PTT) {
     if (txAllowState) {
-      sprintf(String, vfoStateNames[txAllowState]);
+      sprintf(String, VfoState[txAllowState]);
     } else if (isTransmitting) {
       f = GetOffsetedF(gCurrentVfo, f);
       sprintf(String, "TX %u.%05u", f / 100000, f % 100000);
@@ -1023,7 +1027,7 @@ void OnKeyDownStill(KEY_Code_t key) {
     // start transmit
     UpdateBatteryInfo();
     if (gBatteryDisplayLevel == 6) {
-      txAllowState = VFO_STATE_VOL_HIGH;
+      txAllowState = VFO_STATE_VOLTAGE_HIGH;
     } else if (IsTXAllowed(GetOffsetedF(gCurrentVfo, fMeasure))) {
       txAllowState = VFO_STATE_NORMAL;
       ToggleTX(true);
@@ -1387,7 +1391,7 @@ void APP_RunSpectrum() {
   settings.listenBw = vfo.CHANNEL_BANDWIDTH == BANDWIDTH_WIDE
                           ? BANDWIDTH_WIDE
                           : BANDWIDTH_NARROW;
-  settings.modulationType = vfo.ModulationType;
+  settings.modulationType = vfo.Modulation;
 
   AutomaticPresetChoose(currentFreq);
 
