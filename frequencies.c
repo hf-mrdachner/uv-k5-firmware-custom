@@ -45,6 +45,8 @@ const freq_band_table_t frequencyBandTable[] =
 		[BAND6_400MHz]={.lower = 40000000,  .upper = 47000000}
 };
 
+const uint8_t num_freq_band_table = ARRAY_SIZE(frequencyBandTable);
+
 #ifdef ENABLE_NOAA
 	const uint32_t NoaaFrequencyTable[10] =
 	{

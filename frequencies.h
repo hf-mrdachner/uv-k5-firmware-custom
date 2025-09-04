@@ -42,6 +42,7 @@ typedef enum  {
 } FREQUENCY_Band_t;
 
 extern const freq_band_table_t frequencyBandTable[];
+extern const uint8_t num_freq_band_table;
 
 typedef enum {
 // standard steps
