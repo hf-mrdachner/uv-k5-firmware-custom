@@ -80,7 +80,7 @@ static const uint8_t registersToBackup[] = {
     0x13, 0x30, 0x31, 0x37, 0x3D, 0x40, 0x43, 0x47, 0x48, 0x7D, 0x7E,
 };
 
-static MovingAverage mov = {{128}, {}, 255, 128, 0, 0};
+static MovingAverage mov;
 static const uint8_t MOV_N = ARRAY_SIZE(mov.buf);
 
 uint8_t menuState = 0;
@@ -91,7 +91,6 @@ uint8_t hiddenMenuState = 0;
 uint16_t listenT = 0;
 
 uint16_t batteryUpdateTimer = 0;
-bool isMovingInitialized = false;
 uint8_t lastStepsCount = 0;
 
 VfoState_t txAllowState;

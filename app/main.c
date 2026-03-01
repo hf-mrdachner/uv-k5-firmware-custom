@@ -28,7 +28,7 @@
 #include "app/scanner.h"
 
 #ifdef ENABLE_SPECTRUM
-#include "app/spectrum.h"
+extern void APP_RunSpectrum(void);
 #endif
 
 #include "audio.h"
