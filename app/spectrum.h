@@ -41,6 +41,7 @@
 #include "../settings.h"
 #include "../ui/battery.h"
 #include "../ui/helper.h"
+#include "../ui/main.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -370,6 +371,76 @@ static const RegisterSpec hiddenRegisterSpecs[] = {
 
 };
 #endif
+
+// Wrapper: set modulation (avoids circular dep between bk4819.h and radio.h)
+static inline void BK4819_SetModulation(ModulationMode_t m) {
+  RADIO_SetModulation(m);
+}
+
+// Apply TX frequency offset from VFO settings
+static inline uint32_t GetOffsetedF(VFO_Info_t *vfo, uint32_t f) {
+  switch (vfo->TX_OFFSET_FREQUENCY_DIRECTION) {
+  case TX_OFFSET_FREQUENCY_DIRECTION_ADD:
+    return f + vfo->TX_OFFSET_FREQUENCY;
+  case TX_OFFSET_FREQUENCY_DIRECTION_SUB:
+    return f - vfo->TX_OFFSET_FREQUENCY;
+  default:
+    return f;
+  }
+}
+
+// Identity mappings (no frequency transform needed in this implementation)
+static inline uint32_t GetTuneF(uint32_t f)  { return f; }
+static inline uint32_t GetScreenF(uint32_t f) { return f; }
+
+// TX allowed check
+static inline bool IsTXAllowed(uint32_t f) { return TX_freq_check(f) == 0; }
+
+// Draw a vertical line in the framebuffer at column x, from row y1 to y2
+static inline void DrawHLine(uint8_t y1, uint8_t y2, uint8_t x, bool black) {
+  UI_DrawLineBuffer(gFrameBuffer, x, y1, x, y2, black);
+}
+
+// Set/clear one pixel in the framebuffer (color=0 → white, color!=0 → black)
+static inline void PutPixel(uint8_t x, uint8_t y, uint8_t color) {
+  UI_DrawPixelBuffer(gFrameBuffer, x, y, color != 0);
+}
+
+// Render a string using the 3×5 pixel font.
+// x, y: top-left pixel in full-screen coordinates (0..63).
+//   y < 8  → render into gStatusLine
+//   y >= 8 → render into gFrameBuffer (framebuffer y = screen_y - 8)
+// align: currently unused (always left-aligned from x)
+// color: true = black text, false = white text (assumes background already filled)
+static inline void UI_PrintStringSmallest(const char *str, uint8_t x, uint8_t y,
+                                          bool align, bool color) {
+  (void)align;
+  for (uint8_t i = 0; str[i] != '\0'; i++) {
+    uint8_t ch = (uint8_t)str[i];
+    if (ch < 0x20 || ch > 0x7F)
+      continue;
+    uint8_t char_idx = ch - 0x20;
+    for (uint8_t col = 0; col < 3; col++) {
+      uint8_t col_data = gFont3x5[char_idx][col];
+      uint8_t px = x + i * 4 + col;
+      if (px >= 128)
+        break;
+      for (uint8_t row = 0; row < 5; row++) {
+        if ((col_data >> row) & 1u) {
+          uint8_t py = y + row;
+          if (py < 8) {
+            if (color)
+              gStatusLine[px] |= (1u << py);
+            else
+              gStatusLine[px] &= ~(1u << py);
+          } else {
+            UI_DrawPixelBuffer(gFrameBuffer, px, py - 8, color);
+          }
+        }
+      }
+    }
+  }
+}
 
 void APP_RunSpectrum(void);
 

@@ -334,7 +334,7 @@ static void ToggleTX(bool on) {
                                gCurrentVfo->pTX->Frequency);
   } else {
     RADIO_SendEndOfTransmission();
-    RADIO_EnableCxCSS();
+    RADIO_SendCssTail();
 
     BK4819_SetupPowerAmplifier(0, 0);
 
@@ -674,13 +674,13 @@ static void DrawF(uint32_t f) {
 
   if (currentState == STILL && kbd.current == KEY_PTT) {
     if (txAllowState) {
-      sprintf(String, VfoState[txAllowState]);
+      sprintf(String, "%s", VfoStateStr[txAllowState]);
     } else if (isTransmitting) {
       f = GetOffsetedF(gCurrentVfo, f);
       sprintf(String, "TX %u.%05u", f / 100000, f % 100000);
     }
   }
-  UI_PrintStringSmall(String, 8, 127, 0);
+  UI_PrintStringSmallNormal(String, 8, 127, 0);
 }
 
 static void DrawNums() {
@@ -1075,7 +1075,7 @@ static void OnKeysReleased() {
 }
 
 static void RenderFreqInput() {
-  UI_PrintString(freqInputString, 2, 127, 0, 8, true);
+  UI_PrintString(freqInputString, 2, 127, 0, 8);
 }
 
 static void RenderStatus() {
