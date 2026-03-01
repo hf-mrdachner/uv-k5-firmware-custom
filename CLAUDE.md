@@ -53,7 +53,7 @@ The merge is **currently broken** – the fagci spectrum app calls functions tha
 ### API Conventions
 - Frequencies are in **10 Hz units** (e.g. 145 MHz = 14 500 000)
 - `RegisterSpec` = `{char *name, uint8_t num, uint8_t offset, uint16_t mask, uint16_t inc}` — describes a BK4819 register bit-field
-- `BK4819_SetRegValue(s, v)` writes a bit-field; the inverse `BK4819_GetRegValue(s)` **does not yet exist** (see below)
+- `BK4819_SetRegValue(s, v)` writes a bit-field; `BK4819_GetRegValue(s)` reads one: `(ReadRegister(s.num) >> s.offset) & s.mask`
 - TX-offset: `VFO_Info_t` has `TX_OFFSET_FREQUENCY_DIRECTION` (OFF/ADD/SUB, from `settings.h`) and `TX_OFFSET_FREQUENCY`
 - `TX_freq_check(f) == 0` means TX is allowed on frequency `f`
 
@@ -80,7 +80,7 @@ All missing symbols have been implemented. The following summarises what was don
 | `GetTuneF(uint32_t f)` | identity — return `f` |
 | `GetScreenF(uint32_t f)` | identity — return `f` |
 | `IsTXAllowed(uint32_t f)` | `TX_freq_check(f) == 0` |
-| `DrawHLine(uint8_t y1, uint8_t y2, uint8_t x, bool black)` | `UI_DrawLineBuffer(gFrameBuffer, x, y1, x, y2, black)` |
+| `DrawVLine(uint8_t x, uint8_t y1, uint8_t y2, bool black)` | `UI_DrawLineBuffer(gFrameBuffer, x, y1, x, y2, black)` — renamed from `DrawHLine` (was misnamed) |
 | `PutPixel(uint8_t x, uint8_t y, uint8_t color)` | `UI_DrawPixelBuffer(gFrameBuffer, x, y, color != 0)` |
 | `UI_PrintStringSmallest(str, x, y, align, color)` | renders `gFont3x5` into `gStatusLine` (y<8) or `gFrameBuffer` (y≥8, framebuffer_y = y-8); `align` unused (left-aligned) |
 
@@ -110,7 +110,18 @@ All missing symbols have been implemented. The following summarises what was don
 - `gFont3x5[96][3]` — 3 bytes/char; each byte = one column, bits 0–4 = pixels top-to-bottom
 - `BK4819_REG_73/74/75` not in enum but used as raw literals in `RegisterSpec` — compiles OK (implicit int cast)
 
+### Pending Fixes (from code review of commit 6e0f3d1)
+
+| # | Severity | File | Issue |
+|---|----------|------|-------|
+| 1 | ~~**Bug**~~ FIXED | `app/spectrum.h` | `uint8_t px` in `UI_PrintStringSmallest` — changed to `uint16_t` to prevent wrap-around corruption. |
+| 2 | ~~**Bug**~~ FIXED | `app/spectrum.h` + `spectrum.c` | `DrawHLine` renamed to `DrawVLine`, params reordered to `(x, y1, y2, black)`. Call site in `spectrum.c` updated. |
+| 3 | Style | `driver/bk4819.c:843` | `BK4819_ToggleAFBit` uses magic `(1u << 6)` for an undocumented REG_47 bit. Add a comment explaining what the bit controls. |
+| 4 | Style | `app/spectrum.h` | `UI_PrintStringSmallest` is a ~30-line `static inline` in a header. Move to `spectrum.c` as a `static` function to avoid flash duplication if the header is ever included from a second TU. |
+| 5 | Style | `app/spectrum.h` | Missing newline at EOF — can trigger `-Wnewline-eof` on some toolchains. |
+
 ### Open Questions
-- Does `BK4819_TuneTo(..., precise=false)` need a shorter settling delay than `precise=true`? (Currently treated as identical.)
-- Should `UI_PrintStringSmallest` with `align=true` center the string or right-align it? Currently ignored (always left-aligned from x). Affects status bar layout only.
+- `BK4819_TuneTo(..., precise=false)` currently ignores the flag — both paths have identical settling. A fast-scan path may need a shorter delay for useful spectrum scan speed.
+- `GetTuneF` / `GetScreenF` are identity stubs. The original fagci code may have applied a TCXO calibration offset here. Verify against fagci source before assuming identity is correct.
+- `UI_PrintStringSmallest` with `align=true` is currently always left-aligned. If status bar labels need centering or right-alignment, this must be implemented.
 - Build system: `make` is not on PATH in the current shell; use Docker or WSL to compile.

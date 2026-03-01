@@ -600,7 +600,7 @@ static void DrawSpectrum() {
       continue;
     }
     uint16_t rssi = rssiHistory[i];
-    DrawHLine(Rssi2Y(rssi), DrawingEndY, x, true);
+    DrawVLine(x, Rssi2Y(rssi), DrawingEndY, true);
   }
 }
 

@@ -397,7 +397,7 @@ static inline uint32_t GetScreenF(uint32_t f) { return f; }
 static inline bool IsTXAllowed(uint32_t f) { return TX_freq_check(f) == 0; }
 
 // Draw a vertical line in the framebuffer at column x, from row y1 to y2
-static inline void DrawHLine(uint8_t y1, uint8_t y2, uint8_t x, bool black) {
+static inline void DrawVLine(uint8_t x, uint8_t y1, uint8_t y2, bool black) {
   UI_DrawLineBuffer(gFrameBuffer, x, y1, x, y2, black);
 }
 
@@ -422,7 +422,7 @@ static inline void UI_PrintStringSmallest(const char *str, uint8_t x, uint8_t y,
     uint8_t char_idx = ch - 0x20;
     for (uint8_t col = 0; col < 3; col++) {
       uint8_t col_data = gFont3x5[char_idx][col];
-      uint8_t px = x + i * 4 + col;
+      uint16_t px = x + i * 4 + col;
       if (px >= 128)
         break;
       for (uint8_t row = 0; row < 5; row++) {
