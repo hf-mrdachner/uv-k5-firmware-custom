@@ -1154,7 +1154,7 @@ static void RenderStill() {
     const uint8_t CELL_WIDTH = 30;
     uint8_t row = 3;
 
-    for (int i = 0, idx = 1; idx < ARRAY_SIZE(registerSpecs); ++i, ++idx) {
+    for (uint8_t i = 0, idx = 1; idx < ARRAY_SIZE(registerSpecs); ++i, ++idx) {
       if (idx == 5) {
         row += 2;
         i = 0;
@@ -1389,8 +1389,8 @@ void APP_RunSpectrum() {
   currentFreq = initialFreq;
   settings.scanStepIndex = gStepSettingToIndex[vfo.STEP_SETTING];
   settings.listenBw = vfo.CHANNEL_BANDWIDTH == BANDWIDTH_WIDE
-                          ? BANDWIDTH_WIDE
-                          : BANDWIDTH_NARROW;
+                          ? BK4819_FILTER_BW_WIDE
+                          : BK4819_FILTER_BW_NARROW;
   settings.modulationType = vfo.Modulation;
 
   AutomaticPresetChoose(currentFreq);
