@@ -396,6 +396,26 @@ Uses [pawsay stub](https://www.dg7ybn.de/Symmetrising/Symmetrising.htm#Pawsey_St
 Download [Freecad model here](images/ARDF2_Ant.FCStd).
 
 
+
+### 3 Element Tape Measure Yagi for 70 cm
+<img src="images/70cm_3el_tapemeasure.jpg" width=600 />
+<img src="images/70cm_3el_tapemeasure_radiation_pattern.jpg" width=600 />
+
+
+Made out of 12mm tape measure. Designed for Draussenfuchs Project.
+
+Pro: Very good F/B ratio, light weight (70g), cheap, foldable.
+
+[3d printed parts available here.](]https://www.printables.com/model/1757409-3-element-yagi-direction-finding-antenna-for-70cm)
+
+| Element | Length | Position |
+| --- | --- | --- |
+| Reflector | 34.6 cm | 0 cm |
+| Radiator | 30 cm | 12 cm |
+| Director | 28 cm | 23 cm |
+
+
+
 ### 3 Element Yagi for 70 cm
 <img src="images/70cm_3el_optim.jpg" width=600 />
 <img src="images/20250705_103756_3el_yagi_optim_horizontal_standort3_diagr.png" width=600 />
