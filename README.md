@@ -406,7 +406,7 @@ Made out of 12mm tape measure. Designed for Draussenfuchs Project.
 
 Pro: Very good F/B ratio, light weight (70g), cheap, foldable.
 
-[3d printed parts available here.](]https://www.printables.com/model/1757409-3-element-yagi-direction-finding-antenna-for-70cm)
+[3d printed parts available here.](https://www.printables.com/model/1757409-3-element-yagi-direction-finding-antenna-for-70cm)
 
 | Element | Length | Position |
 | --- | --- | --- |
