@@ -203,9 +203,8 @@ repo/firmware entirely, wrong firmware can brick the device.
   (`qsSerial.js`/`tool_patcher.js`/`fwpack.js`, reverse-engineered from source), takes a
   `*.packed.bin`, needs only `pyserial`. Tests in `tools/test_k5flash.py` (CRC
   cross-checked against `crcmod`, full protocol flow against a simulated bootloader) pass
-  without hardware, but the actual real-hardware flash was only verified via the web
-  flasher directly (browser automation), not yet via `k5flash.py` itself — check PR #5 /
-  git log for whether that's since been confirmed.
+  without hardware, and it has since also been confirmed working against a real UV-K5 v1
+  over COM10/CH340 (2026-07-30: "Successfully flashed firmware.").
 - **Bootloader entry sequence matters and is easy to get wrong:** power off → hold PTT →
   power on (white LED must light) → *then* plug in the programming cable. Plugging the
   cable in before/without this gives `BufferOverrunError: Buffer overrun` on read (radio
