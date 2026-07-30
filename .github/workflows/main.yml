@@ -1,5 +1,8 @@
 on:
+  pull_request:
   push:
+    branches: [main]
+    tags: ['v*']
 
 jobs:
   build:
@@ -28,7 +31,7 @@ jobs:
       - name: Make
         run:  make
       - name: size
-        run:  arm-none-eabi-size firmware
+        run:  arm-none-eabi-size firmware_uvk5_v1
 
       - name: 'Upload Artifact'
         uses: actions/upload-artifact@v4
@@ -41,7 +44,7 @@ jobs:
         uses: svenstaro/upload-release-action@v2
         with:
           repo_token: ${{ secrets.GITHUB_TOKEN }}
-          file: firmware.packed.bin
+          file: firmware_uvk5_v1.packed.bin
           asset_name: egzumer_$tag.packed.bin
           tag: ${{ github.ref }}
           overwrite: true
