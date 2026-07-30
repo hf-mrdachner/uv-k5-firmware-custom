@@ -191,3 +191,28 @@ All missing symbols have been implemented. The following summarises what was don
 - `GetTuneF` / `GetScreenF` are identity stubs. The original fagci code may have applied a TCXO calibration offset here. Verify against fagci source before assuming identity is correct.
 - `UI_PrintStringSmallest` with `align=true` is currently always left-aligned. If status bar labels need centering or right-alignment, this must be implemented.
 - Build system: `make` is not on PATH in the current shell; use Docker or WSL to compile.
+
+### Flashing a real device
+Hardware version 1 only (see Compatible Devices in README) — V2/V3 need a different
+repo/firmware entirely, wrong firmware can brick the device.
+
+- **CLI flasher: `tools/k5flash.py`.** Prefer this over `k5prog_win.exe` linked in the
+  README — despite the name/docs treating it like the linux `k5prog` CLI, it's actually
+  a GUI app and can't be scripted or driven headlessly (confirmed 2026-07-30). `k5flash.py`
+  reimplements the same wire protocol as the egzumer uvtools web flasher
+  (`qsSerial.js`/`tool_patcher.js`/`fwpack.js`, reverse-engineered from source), takes a
+  `*.packed.bin`, needs only `pyserial`. Tests in `tools/test_k5flash.py` (CRC
+  cross-checked against `crcmod`, full protocol flow against a simulated bootloader) pass
+  without hardware, but the actual real-hardware flash was only verified via the web
+  flasher directly (browser automation), not yet via `k5flash.py` itself — check PR #5 /
+  git log for whether that's since been confirmed.
+- **Bootloader entry sequence matters and is easy to get wrong:** power off → hold PTT →
+  power on (white LED must light) → *then* plug in the programming cable. Plugging the
+  cable in before/without this gives `BufferOverrunError: Buffer overrun` on read (radio
+  sends unexpected data because it booted normally instead of into the bootloader) —
+  reload the flasher and redo the sequence from a full power-off, don't just retry.
+- The web flasher (https://egzumer.github.io/uvtools/) needs a Chromium browser (Web
+  Serial API) and — if driving it via claude-in-chrome — the port-picker and file-picker
+  are native browser/OS dialogs outside the page DOM: use the `file_upload` tool for the
+  firmware file (don't click the picker, you can't see or interact with it), and ask the
+  user to complete the native serial-port-selection dialog themselves.
