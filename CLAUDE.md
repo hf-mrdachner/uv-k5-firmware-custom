@@ -29,7 +29,66 @@ This repo is a **merge of two forks** of the DualTachyon base firmware:
 - **DualTachyon** (base): well-structured original firmware in C
 - **fagci**: added a spectrum analyzer app (`app/spectrum.c` / `app/spectrum.h`)
 
+On top of that, `main` is kept in sync with **upstream `reald/uv-k5-firmware-custom`**
+(`git remote -v` → `upstream`), which adds the ARDF fox-hunting features (`app/ardf.c`,
+`ui/ardf.c`). Sync flow: `git fetch upstream && git merge upstream/main`, push to a
+branch, PR into this fork (`main` has branch protection: PRs + required `build` status
+check, no direct push).
+
 The merge is **currently broken** – the fagci spectrum app calls functions that don't exist in the DualTachyon API.
+
+### Device purpose — dual use
+The devices built from this firmware serve **two roles at once**:
+1. **ARDF fox hunting** (Fuchsjagd) — the reason `ENABLE_ARDF` and the reald sync exist.
+2. **General-purpose ham handhelds** — everyday TX/RX, not fuchsjagd-only.
+
+Because of (2), features that only make sense for a receive-only fuchsjagd-only device
+must **not** be assumed acceptable. Concretely:
+- `ENABLE_PREVENT_TX` must stay **disabled** — it hard-disables all TX
+  (`frequencies.c: TX_freq_check` returns -1 unconditionally). It was on by default
+  from the upstream/fork feature list but conflicts with normal handheld use.
+- Note `ENABLE_ARDF`'s *own* internal TX-disable (`gSetting_ARDFEnable` branch in the
+  same function) is separate and fine — that only blocks TX while ARDF mode is actively
+  switched on, not permanently.
+- When evaluating which `ENABLE_*` feature to trim (e.g. for flash budget, see below),
+  weigh it against normal handheld usability, not just fuchsjagd needs.
+
+### Flash budget is tight — combined feature set from two active forks
+FLASH is 60K (`firmware.ld`). This fork enables **both** the fagci spectrum-analyzer
+feature set **and** the full reald ARDF feature set simultaneously, which upstream
+(reald alone) doesn't — so `main` can go over budget on a routine upstream sync even
+when upstream's own CI is green. When this happens:
+- Two "free" tricks already applied historically, don't expect more headroom there:
+  `freqPresets` table shrunk (`app/spectrum.h`, commit `da094e0`), a large
+  compile-time-initialized struct moved from `.data` to `.bss` (commit `3a9e99d`).
+- Measured cost of each `ENABLE_*` flag (text+data bytes saved if disabled, measured
+  2026-07-30 against the ARDF-merge overflow of ~1088–1116 bytes):
+
+  | Flag | Bytes saved if disabled | Notes |
+  |------|--------------------------|-------|
+  | `ENABLE_FMRADIO` | 4328 | broadcast FM listening — nice-to-have for handheld use |
+  | `ENABLE_UART` | 1920 | **serial programming protocol** — CHIRP / PC programming software depends on this; disabling breaks channel programming |
+  | `ENABLE_AM_FIX` | 732 | AM demodulation quality (airband) |
+  | `ENABLE_SMALL_BOLD` | 628 | font variant, cosmetic |
+  | `ENABLE_RSSI_BAR` | 352 | signal-strength bar UI |
+  | `ENABLE_SCAN_RANGES` | 276 | restrict scanning to configured ranges |
+  | `ENABLE_FLASHLIGHT` | 244 | torch toggle, unrelated to radio function |
+  | `ENABLE_COPY_CHAN_TO_VFO` | 128 | convenience feature |
+  | `ENABLE_BIG_FREQ` | 108 | large frequency font |
+  | `ENABLE_SQUELCH_MORE_SENSITIVE` | 96 | squelch tuning |
+  | `ENABLE_WIDE_RX` | 40 | widened RX range |
+  | `ENABLE_NO_CODE_SCAN_TIMEOUT` | 40 | |
+  | `ENABLE_KEEP_MEM_NAME` | 12 | |
+  | `ENABLE_BYP_RAW_DEMODULATORS` | 24 | |
+  | `ENABLE_FASTER_CHANNEL_SCAN` | 0 | dead-code-eliminated identically either way |
+
+  Don't disable `ENABLE_UART` for space — it breaks CHIRP/PC programming, which matters
+  for the "general handheld" use case. Prefer trimming cosmetic/niche flags first, and
+  ask before removing anything that affects normal radio operation (this is the user's
+  call, not an autonomous size-optimization decision).
+- Measure with: build via Docker (`compile-with-docker.sh` pattern), temporarily widen
+  `firmware.ld`'s `FLASH LENGTH` in a scratch copy so the link succeeds even when over
+  budget, then compare `arm-none-eabi-size` text+data across flag combinations.
 
 ### Key Files
 | File | Purpose |
