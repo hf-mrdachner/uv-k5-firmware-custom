@@ -135,3 +135,27 @@ when upstream's own CI is green. When this happens:
 Build via Docker instead (see `compile-with-docker.sh` / `Dockerfile`, or mount the repo
 into an `archlinux:latest` container and install the packages listed in
 `.github/workflows/main.yml`).
+
+### Flashing a real device
+Hardware version 1 only (see Compatible Devices in README) — V2/V3 need a different
+repo/firmware entirely, wrong firmware can brick the device.
+
+- **CLI flasher: `tools/k5flash.py`.** Prefer this over `k5prog_win.exe` linked in the
+  README — despite the name/docs treating it like the linux `k5prog` CLI, it's actually
+  a GUI app and can't be scripted or driven headlessly (confirmed 2026-07-30). `k5flash.py`
+  reimplements the same wire protocol as the egzumer uvtools web flasher
+  (`qsSerial.js`/`tool_patcher.js`/`fwpack.js`, reverse-engineered from source), takes a
+  `*.packed.bin`, needs only `pyserial`. Tests in `tools/test_k5flash.py` (CRC
+  cross-checked against `crcmod`, full protocol flow against a simulated bootloader) pass
+  without hardware, and it has since also been confirmed working against a real UV-K5 v1
+  over COM10/CH340 (2026-07-30: "Successfully flashed firmware.").
+- **Bootloader entry sequence matters and is easy to get wrong:** power off → hold PTT →
+  power on (white LED must light) → *then* plug in the programming cable. Plugging the
+  cable in before/without this gives `BufferOverrunError: Buffer overrun` on read (radio
+  sends unexpected data because it booted normally instead of into the bootloader) —
+  reload the flasher and redo the sequence from a full power-off, don't just retry.
+- The web flasher (https://egzumer.github.io/uvtools/) needs a Chromium browser (Web
+  Serial API) and — if driving it via claude-in-chrome — the port-picker and file-picker
+  are native browser/OS dialogs outside the page DOM: use the `file_upload` tool for the
+  firmware file (don't click the picker, you can't see or interact with it), and ask the
+  user to complete the native serial-port-selection dialog themselves.
