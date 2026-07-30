@@ -1,0 +1,27 @@
+// Scriptable fake RF signal for host-side spectrum tests.
+//
+// BK4819_GetRSSI() (stubbed in stubs.c) reads sequentially from this buffer
+// instead of touching real hardware. Tests fill fake_rssi_profile with a
+// synthetic RSSI-vs-frequency-bin profile, set fake_rssi_profile_len, reset
+// fake_rssi_profile_pos to 0, then drive a scan sweep through the real
+// spectrum.c scan functions (Scan/NextScanStep/MoveHistory/...).
+//
+// Calls beyond fake_rssi_profile_len wrap around (index % len), so a sweep
+// slightly longer than the profile still returns sane values.
+
+#ifndef FAKE_SIGNAL_H
+#define FAKE_SIGNAL_H
+
+#include <stdint.h>
+
+#define FAKE_RSSI_PROFILE_MAX 256
+
+extern uint16_t fake_rssi_profile[FAKE_RSSI_PROFILE_MAX];
+extern int fake_rssi_profile_len;
+extern int fake_rssi_profile_pos;
+
+// Set by the BK4819_SetAGC() stub to whatever it was last called with, so
+// tests can confirm spectrum code actually froze/restored gain around a scan.
+extern bool fake_agc_enabled;
+
+#endif

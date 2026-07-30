@@ -159,3 +159,18 @@ repo/firmware entirely, wrong firmware can brick the device.
   are native browser/OS dialogs outside the page DOM: use the `file_upload` tool for the
   firmware file (don't click the picker, you can't see or interact with it), and ask the
   user to complete the native serial-port-selection dialog themselves.
+
+### Open Questions
+- **`driver/bk4819.c` REG_43 "BW Mode Selection" field (bits <5:4>) comment is
+  incomplete.** It documents only 0/1/2 (12.5k/6.25k/25k), but
+  `app/spectrum.h`'s `listenBWRegValues[]` (6.25k entry, `0b0100100001011000`)
+  decodes to value `3` for that field — not a bug, since the array is a
+  byte-for-byte copy of egzumer/uv-k5-firmware-custom's own (widely deployed,
+  real-hardware-tested) values, so `3` clearly has a real, working meaning.
+  No official BK4819 datasheet exists — this driver's register semantics all
+  come from DualTachyon's original reverse-engineering of Quansheng's stock
+  firmware, and this particular comment is just an incomplete leftover from
+  that pass. Worth revisiting to figure out what value 3 actually does and
+  update the comment (driver/bk4819.c:569-584) accordingly — not blocking
+  anything, found 2026-07-30 while chasing an unrelated "frozen squelch
+  trigger line" report in the spectrum analyzer.

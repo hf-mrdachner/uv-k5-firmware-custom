@@ -5,6 +5,23 @@ on:
     tags: ['v*']
 
 jobs:
+  host-tests:
+    runs-on: ubuntu-22.04
+    container:
+      image: archlinux:latest
+    steps:
+      - name: base-devel
+        run:  pacman -Syyu base-devel --noconfirm
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: safe.directory
+        run:  git config --global --add safe.directory /__w/uv-k5-firmware-custom/uv-k5-firmware-custom
+
+      - name: Run host-side spectrum tests
+        run:  ./tools/host_tests/build.sh
+
   build:
     runs-on: ubuntu-22.04
     container:
