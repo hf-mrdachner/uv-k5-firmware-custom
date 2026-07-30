@@ -1,4 +1,4 @@
-# Open re-implementation of the Quansheng UV-K5/K6/5R v2.1.27 firmware with 2m and 70cm ARDF support
+# Open Quansheng UV-K5/K6/5R version 1 firmware with 2m and 70cm ARDF support
 
 This is all based on [egzumer custom firmware](https://github.com/egzumer/uv-k5-firmware-custom)!
 
@@ -23,16 +23,16 @@ Anyway, have fun.
 * [Compatible Devices](#compatible-devices)
 * [Manual](#manual)
 * [Manual for ARDF](#specific-ardf-features)
+* [Firmware Flashing](#firmware-flashing)
 * [Headphones](#headphones)
-* [Radio Performance](#radio-performance)
 * [Antenna Proposals](#antenna-proposals)
-* [User Customization](#user-customization)
+* [Radio Performance](#radio-performance)
 * [Compiler](#compiler)
 * [Building](#building)
 * [Credits](#credits)
 * [Other sources of information](#other-sources-of-information)
 * [License](#license)
-* [Example changes/updates](#example-changesupdates)
+* [Example changes/updates](#example-of-ardf-changesupdates)
 
 ## Main features:
 * ARDF features
@@ -72,17 +72,45 @@ Anyway, have fun.
 
 ## Compatible Devices
 
-All devices with FCC ID "XBPUV-K5":
+> [!WARNING]
+> There is are **new hardware versions out**. **Check carefully** which hardware version do you have **before flashing** any new firmware! 
 
-* Quansheng UV-K5 :white_check_mark:
-* Quansheng UV-K5+ ("UV-5R PLUS") :white_check_mark:
-* Quansheng UV-K5(8) :white_check_mark: / Quansheng UV-K6 :white_check_mark:
-* Quansheng UV-K5(99) :white_check_mark:
+:exclamation: All versions have different processors and need the right firmware and flash tool to run. :exclamation:
+
+> The hardware version of a device usually can be found on the label under the battery:
+> <img src="images/version2.jpg" width=800 />
+
+Version 1 devices have no version label, version 2 has "V2", version 3 has "V3" and Software Version 7.x (Menu 53 "VER").
+
+> [!WARNING]
+> There are falsely labeled devices out! (Internally V2 but V3 on the label.)
+> Please check [this discussion first.](https://github.com/armel/uv-k1-k5v3-firmware-custom/discussions/54)
+
+All version 1 devices (with FCC ID "XBPUV-K5"):
+
+* Quansheng UV-K5 version 1 :white_check_mark:
+* Quansheng UV-K5+ ("UV-5R PLUS") version 1 :white_check_mark:
+* Quansheng UV-K5(8) version 1 :white_check_mark: / Quansheng UV-K6 version 1 :white_check_mark:
+* Quansheng UV-K5(99) version 1 :white_check_mark:
+
+NOT COMPATIBLE with this project but **alternative firmware available**:
+* Quansheng UV-K5(8) / UV-K5(99) (with FCC ID "XBPUV-K5") version 2 :heavy_check_mark:
+  * Check this project: [Quansheng UV-Kx firmware with ARDF support for hardware version 2](https://codeberg.org/DL9CAT/uv-k5-firmware-custom_v2/releases) :white_check_mark:
+
+NOT COMPATIBLE with this project but **alternative firmware available**:
+* Quansheng UV-K5(8) / UV-K5(99) version 3 :heavy_check_mark:
+* Quansheng UV-K1 / UV-K1(8) :heavy_check_mark:
+  * Check this project: [Quansheng UV-K5 version 3 and UV-K1 firmware with ARDF support](https://github.com/reald/uv-k1-k5v3-firmware-custom/releases/) :white_check_mark:
+
+> [!TIP]
+> The gain attenuator of the hardware version 3 has less control range than V1 or V2 devices. When searching strong transmitters the strongest direction is not that easy to hear.
+> Use a (switchable) attenuator of aprox. 30dB in the antenna cable to handle strong signals. Due to the low power transmitters used this is NOT relevant for draussenfuchs.
 
 NOT COMPATIBLE:
-
 * Quansheng TK-11 / TK-11(8) :x:
 * Similar looking baofeng radios :x:
+
+
 
 ## Manual
 
@@ -93,45 +121,78 @@ Up to date manual is available in the [Wiki section](https://github.com/egzumer/
 Download a [precompiled release](https://github.com/reald/uv-k5-firmware-custom/releases) or compile with ENABLE_ARDF=1 and preferable with ENABLE_PREVENT_TX=1. 
 To get enough free flash space disable some unneeded TX features (e.g. ENABLE_DTMF_CALLING=0). 
 
-### Firmware Flashing
+## Firmware Flashing
 
-#### Preparation
+### Preparation
 You need a quansheng programming cable with an integrated USB to serial converter. Most baofeng cables are working fine, too.
 
+1. Find out which hardware version do you have and which firmware do you need for it. See [compatible devices](#compatible-devices).
 1. Backup your settings!
 1. Charge battery if almost empty!
 1. Press PTT key while turning the radio on. This will NOT work if cable is already plugged. White LED on top MUST be on.
 1. Connect the programming cable NOW
-1. Run a flash program (see next section)
+1. Run flash program which fits to your hardware version (see next sections)
 
-#### Flash programs
-- [Webflasher for chrome based browsers](https://egzumer.github.io/uvtools/) (Choose `firmware.packed.bin`)
+#### Flash programs for UV-K5/6 hardware version 1
+- [HW Version 1 Webflasher for chrome based browsers](https://egzumer.github.io/uvtools/) (Choose `firmware.packed.bin`)
+  - :warning: Do NOT flash V2 or V3 hardware devices with this flasher!
 - On linux [k5prog](https://github.com/nica-f/k5prog) can be used: Run `k5prog -b firmware.bin -F -YYY`
+- On windows [k5prog_win](https://github.com/OneOfEleven/k5prog-win/raw/refs/heads/main/k5prog_win.exe) can be used. (Choose `firmware.packed.bin`)
 - Official quansheng flash tool (Windows only. Choose `firmware.packed.bin`)
+
+#### Flash programs for UV-K5/6 hardware version 2
+- There is no working webflasher for this hardware version.
+- On linux [k5prog](https://github.com/nica-f/k5prog) can be used: Run `k5prog -b UVK5-V2.ARDF.bin -F -YYY`
+- On windows [k5prog_win](https://github.com/OneOfEleven/k5prog-win/raw/refs/heads/main/k5prog_win.exe) can be used. (Choose `UVK5-V2.ARDF.packed.bin`)
+ 
+#### Flash programs for UV-K5/6 hardware version 3 and K1
+- Either programming cable or USB-C cable can be used.
+- :warning: k5prog and k5prog_win are NOT compatible.
+- [UVTOOLS2 for chrome based browsers](https://armel.github.io/uvtools2/)
+  - :warning: Do NOT flash V1 or V2 hardware devices with this flasher!
 
 #### Trouble Shooting
 - If device does not boot after flashing something went wrong. Try flashing another firmware file or a different flash tool.
 - If serial port is not found on linux add your username to the `dialout` group (`sudo usermod -aG dialout your_username`) and reboot.
 
-### Usage
+## Usage
 
-#### Quick Setup ####
+### Draussenfuchs Quick Setup ###
 
-Turn the power knob to switch the device on. 
+1. Turn the power knob at least 90° to switch the device on. 
+1. Draussenfuchs Mode can be enabled in the menu (ARDF = "DF Simple"). This enables **manual gain control** 
+stepping by pressing **UP/DOWN keys**. Smaller values have lower sensitivity. Use this close to loud transmitters.
+"DF Simple" mode automatically preconfigures the most important settings.
+1. Set frequency stepping to 1 kHz. (Menu: Step = 1.00kHz)
+1. Select amplitude demodulation (Menu: Demodu = AM)
+1. Enter frequency (Main Screen: 433920 for 433.92 MHz)
 
-ARDF Mode can be disabled/enabled in the menu (ARDF = OFF/ON). This enables **manual gain control** 
-by pressing **UP/DOWN keys**. The index reaches from 0 to 19, default is 15.
+That's it.
 
-Gain steps should be roughly 5dB but they are uncalibrated. Expect surprises.
+<img src="images/df1.jpg" width=400 />
+
+Main screen in "DF Simple" mode. Gain step 5 is used, received signal strength is 118 (the higher the stronger the signal). 
+A means "VFO A" (can be A or B, does not matter), "AM" means amplitude demodulation (selected in the menu before),
+"U-" means lowest bandwidth (can be "N-", "N" or "W", too. Does not really matter.). 433.920 is the selected frequency (433.92 MHz).
+
+### Quick Setup ###
+
+For amateur radio direction finding (ARDF) with timing some steps are needed:
+
+Turn the power knob at least 90° to switch the device on. 
+
+ARDF Mode can be disabled/enabled in the menu (ARDF = OFF / ARDF / DF Simple). "ARDF" or "DF Simple" enable **manual gain control** 
+stepping by pressing **UP/DOWN keys**. On step changes the attenuation by approximately 5dB. Index 0
+has the smallest sensitivity.
+"DF Simple" has a simplified display especially created for [Draussenfuchs](https://draussenfuchs.de) or when no timing is needed.
 
 - Disable squelch (Menu: Sql = 0)
 - Disable dual watch (Menu: RxMode = MAIN ONLY).
-- Adjust clock correction if necessary (menu "ClkCor", details below).
-
 - Select number of foxes in menu "NumFox" (default = 5, min = 1, max = 10; 0 disables fox timing).
 - Choose duration time of one fox transmission in menu "FoxDur". Default is 60s. 
 Modify with UP/DOWN key in 0.1s steps or enter value as *5 digit number* in 1/100s resolution. Confirm with menu button (min = 001.00s, max = 999.99s).
 - Enter beep signal before end of fox cycle time (menu "EndSig", 0s = off, 1..30s).
+- Adjust clock correction if necessary (menu "ClkCor", details below).
 - Activate VFO A (long pressing key "2 A/B" toggles between both VFOs.
 - Enter the frequency of the foxes using the number keys. If memory mode is active long press "3 VFO MR" to change to frequency mode.
 - Choose the modulation type of the foxes in menu "Demod" (e.g. AM).
@@ -183,12 +244,17 @@ different gains in different time slots.)
 
 You can quickly switch between both VFOs by long pressing "2 (A/B)" or a configured function key (see below).
 
-If gain remember is not activated on the actual VFO, no gain index history is shown in the lower part of the screen.
+If gain remember is not activated on the actual VFO or "no timing" is selected (NumFox=0), no gain index history is shown in the lower part of the screen.
 
 
 #### Clock Correction ####
 The microcontroller of the radio has no crystal oscillator and runs on an internal 48 MHz resonator only.
-So all timers in the CPU are not very precise. This leads to a heavily drifting clock. The firmware provides a correction
+So all timers in the CPU are not very precise. This leads to a heavily drifting clock. 
+
+> [!Note]
+> If no timing is used (e.g. in ARDF="DF Simple" mode) clock correction is **not** necessary.
+
+The firmware provides a correction
 mechanism to reach acceptable ranges. Start ARDF mode and stop **how many seconds really pass** until **the radio tells 1 hour is up**. 
 (Useful settings: NumFox = 10, FoxDur = 60.00s, sync to reference clock.) The formula for the correction value is:
 
@@ -203,7 +269,7 @@ Enter this value in menu "ClkCor" using UP/DOWN keys (allowed range: -500 ... 50
 
 #### Function keys ####
 Two different ARDF actions can be mapped to function keys: 
-* Set manual gain to a medium index value (7). It is recommended to configure "ARDF Set Med.Gain" to short press on F2 key, menu: F2Shrt) 
+* Set manual gain to a medium index value (4). It is recommended to configure "ARDF Set Med.Gain" to short press on F2 key, menu: F2Shrt) 
 * Enable/Disable ARDF function (e.g. for long press on F1 key / menu: F1Long = "ARDF off/on").
 
 It is recommended to configure "Switch VFO" to F1 short (menu F1Shrt).
@@ -236,12 +302,18 @@ changes can be done. This can be useful if preconfigured devices are handed to n
 #### Troubleshooting ####
 * The gain index history is flickering.
   * Disable dual watch (RxMode = MAIN ONLY).
+* Only 3 digits are accepted when entering a frequency.
+  * The active channel is in memory mode. Long press "3 VFO MR" to change to frequency mode.
 * The entered frequency is modified.
-  * Decrease frequency step in menu "Step" to desired channel raster.
+  * Decrease frequency step in menu "Step" to desired channel raster (e.g. 1.00 kHz).
 * Chirp does read different channel settings than in my radio.
   * If you changed channel settings on the radio you have to store them first (menu "ChSave").
 * Signals are all very low, antenna does not respond to rotation movement.
   * Increase volume knob to 90 degree position or more.
+* After activating "DF Simple" and switching back to "ARDF" mode the gain remeber table is not shown.
+  * Reactivate Fox Timing (NumFox > 1) and Gain Remember (GainRe) for the desired VFO
+* UP and Down Keys are swapped on UV-K5 V3.
+  * K1 settings are selected. Change this in the hidden menu: Hold PTT and SIDE BUTTON 1️⃣ and switch the device on. Release both keys. Change menu point "SetNav" (80) from „LEFT RIGHT UV-K1“ to „UP DOWN UV-K5(8)“. Restart radio.
 
 ## Headphones
 
@@ -284,9 +356,9 @@ Try inline capacitor values of 0.1uF .. 10uF as a start. For my 8 ohms (2x 16 oh
 
 Pro: Very easy and fast to build, tolerant, very good SWR, light weight, cheap.
 
-Cons: Front to back ratio not optimal, radials move on boom if not secured.
+Cons: Front to back ratio not optimal (but not bad!), radials move on boom if not secured.
 
-| Element | Length | Position | 
+| Element | Length | Position |
 | --- | --- | --- |
 | Reflector | 103.9cm | 0 cm |
 | Radiator | 102 cm | 30 cm |
@@ -295,7 +367,7 @@ Cons: Front to back ratio not optimal, radials move on boom if not secured.
 [Build instructions by DK7ZB](https://www.qsl.net/dk7zb/PVC-Yagis/3-Ele-2m.htm)
 
 
-### 3 Element Tape measurement Antenna for 2m ARDF
+### 3 Element Tape Measure Antenna for 2m ARDF
 
 <img src="images/ardf_setup.jpg" width=600 />
 <img src="images/20250619_112008_2m_ma_band_horizontal_diagr.png" width=600 />
@@ -306,11 +378,42 @@ Cons: More complex to build, not suitable for TX because of missing adaption.
 
 Tip: Use 2 layers of tape measure. Outer 25cm can be single layer.
 
-| Element | Length | Position | 
+| Element | Length | Position |
 | --- | --- | --- |
 | Reflector | 106.5cm | 0 cm |
 | Radiator | 2*47cm | 20 cm |
 | Director | 90,5 cm | 52 cm |
+
+#### 3D printed Mechanical solution by DL7CR ####
+<img src="images/ant_2m_dl7cr.jpg" width=600 />
+
+Pro: Comfortable 3D printed solution with 16mm PCV pipe.
+
+Cons: Pressing buttons needs 2 hands
+
+Uses [pawsay stub](https://www.dg7ybn.de/Symmetrising/Symmetrising.htm#Pawsey_Stub_Symmetrising_Device) as balun.
+
+Download [Freecad model here](images/ARDF2_Ant.FCStd).
+
+
+
+### 3 Element Tape Measure Yagi for 70 cm
+<img src="images/70cm_3el_tapemeasure.jpg" width=600 />
+<img src="images/70cm_3el_tapemeasure_radiation_pattern.jpg" width=600 />
+
+
+Made out of 12mm tape measure. Designed for Draussenfuchs Project.
+
+Pro: Very good F/B ratio, light weight (70g), cheap, foldable.
+
+[3d printed parts available here.](https://www.printables.com/model/1757409-3-element-yagi-direction-finding-antenna-for-70cm)
+
+| Element | Length | Position |
+| --- | --- | --- |
+| Reflector | 34.6 cm | 0 cm |
+| Radiator | 30 cm | 12 cm |
+| Director | 28 cm | 23 cm |
+
 
 
 ### 3 Element Yagi for 70 cm
@@ -321,11 +424,47 @@ Made out of 3.2mm welding rods.
 
 Pro: Quite nice F/B ratio, light weight.
 
-| Element | Length | Position | 
+Cons: Thin rods not so suitable for younger children.
+
+| Element | Length | Position |
 | --- | --- | --- |
 | Reflector | 35 cm | 0 cm |
 | Radiator | 32,6 cm | 12 cm |
 | Director | 30 cm | 23 cm |
+
+
+### 3 Element Tape measure Yagi for 70 cm (DF9NX)
+<img src="images/df9nx_yagi_3dprint.jpg" width=600 />
+
+[3d printed mounts](https://github.com/reald/uv-k5-firmware-custom/raw/refs/heads/main/images/df9nx_70cm_3dfiles.zip) for tape measure elements (19mm) on 10mm aluminium u-profile.
+Driven simply in center of radiator. RG174 cable and M3x12mm screws.
+
+Pro: Radio and antenna combined.
+
+Cons: Not for TX.
+
+| Element | Length | Position |
+| --- | --- | --- |
+| Reflector | 34 cm | 0 cm |
+| Radiator | 32,5 cm | 12.6 cm |
+| Director | 29.5 cm | 18 cm |
+
+
+### 3 Element cable Yagi for 70 cm (DF9NX)
+<img src="images/df9nx_yagi_cable.jpg" width=600 />
+
+[3d printed mounts](https://github.com/reald/uv-k5-firmware-custom/raw/refs/heads/main/images/df9nx_yagi_cable_3dfiles.zip) for electric cable elements on 10mm aluminium u-profile.
+Driven simply in center of radiator.
+
+Pro: Radio and antenna combined, very light weight.
+
+Cons: Not for TX, elements might bend.
+
+| Element | Length | Position |
+| --- | --- | --- |
+| Reflector | 38 cm | 0 cm |
+| Radiator | 30 cm | 8.5 cm |
+| Director | 27 cm | 14 cm |
 
 
 ### Combined 2m / 70cm Antenna by PA0JBG
@@ -335,7 +474,7 @@ Pro: Quite nice F/B ratio, light weight.
 Notes: This prototype has a switchable attenuator (approx. 25dB), this is optional. Boom is made of electrical conducting material.
 
 2 m:
-| Element | Length | Position | 
+| Element | Length | Position |
 | --- | --- | --- |
 | Reflector | 106 cm | 0 cm |
 | Radiator | 94 cm | 20 cm |
@@ -350,7 +489,9 @@ Notes: This prototype has a switchable attenuator (approx. 25dB), this is option
 | Director 2 | 29,8 cm | 31,5 cm |
 | Director 3 | 29,2 cm | 46 cm |
 
+### Other
 
+- [3D printed 3 element draussenfuchs yagi by DG1JAN](https://www.printables.com/model/1698556-draussenfuchs-yagi)
 
 
 ## Radio performance
@@ -368,64 +509,6 @@ non-existent (just like Quansheng's firmware).
 On the other hand, FM RX audio will/should be fine.
 
 But, they are nice toys for the price, fun to play with.
-
-## User customization
-
-You can customize the firmware by enabling/disabling various compile options, this allows
-us to remove certain firmware features in order to make room in the flash for others.
-You'll find the options at the top of "Makefile" ('0' = disable, '1' = enable) ..
-
-
-|Build option | Description |
-| --- | ---- |
-|🧰 **STOCK QUANSHENG FEATURES**||
-| ENABLE_UART | without this you can't configure radio via PC ! |
-| ENABLE_AIRCOPY | easier to just enter frequency with butts |
-| ENABLE_FMRADIO | WBFM VHF broadcast band receiver |
-| ENABLE_NOAA | everything NOAA (only of any use in the USA) |
-| ENABLE_VOICE | want to hear voices ? |
-| ENABLE_VOX | |
-| ENABLE_ALARM | TX alarms |
-| ENABLE_TX1750 | side key 1750Hz TX tone (older style repeater access)|
-| ENABLE_PWRON_PASSWORD | power-on password stuff |
-| ENABLE_DTMF_CALLING | DTMF calling fuctionality, sending calls, receiving calls, group calls, contacts list etc. |
-| ENABLE_FLASHLIGHT | enable top flashlight LED (on, blink, SOS) |
-|🧰 **CUSTOM MODS**||
-| ENABLE_BIG_FREQ | big font frequencies (like original QS firmware) |
-| ENABLE_SMALL_BOLD | bold channel name/no. (when name + freq channel display mode) |
-| ENABLE_CUSTOM_MENU_LAYOUT | changes how the menu looks like |
-| ENABLE_KEEP_MEM_NAME | maintain channel name when (re)saving memory channel|
-| ENABLE_WIDE_RX | full 18MHz to 1300MHz RX (though front-end/PA not designed for full range)|
-| ENABLE_TX_WHEN_AM | allow TX (always FM) when RX is set to AM|
-| ENABLE_F_CAL_MENU | enable the radios hidden frequency calibration menu |
-| ENABLE_CTCSS_TAIL_PHASE_SHIFT | standard CTCSS tail phase shift rather than QS's own 55Hz tone method|
-| ENABLE_BOOT_BEEPS | gives user audio feedback on volume knob position at boot-up |
-| ENABLE_SHOW_CHARGE_LEVEL | show the charge level when the radio is on charge |
-| ENABLE_REVERSE_BAT_SYMBOL | mirror the battery symbol on the status bar (+ pole on the right) |
-| ENABLE_NO_CODE_SCAN_TIMEOUT | disable 32-sec CTCSS/DCS scan timeout (press exit butt instead of time-out to end scan) |
-| ENABLE_AM_FIX | dynamically adjust the front end gains when in AM mode to help prevent AM demodulator saturation, ignore the on-screen RSSI level (for now) |
-| ENABLE_AM_FIX_SHOW_DATA | show debug data for the AM fix |
-| ENABLE_SQUELCH_MORE_SENSITIVE | make squelch levels a little bit more sensitive - I plan to let user adjust the values themselves |
-| ENABLE_FASTER_CHANNEL_SCAN | increases the channel scan speed, but the squelch is also made more twitchy |
-| ENABLE_RSSI_BAR | enable a dBm/Sn RSSI bar graph level in place of the little antenna symbols |
-| ENABLE_AUDIO_BAR | experimental, display an audio bar level when TX'ing |
-| ENABLE_COPY_CHAN_TO_VFO | copy current channel settings into frequency mode. Long press `1 BAND` when in channel mode |
-| ENABLE_SPECTRUM | fagci spectrum analyzer, activated with `F` + `5 NOAA`|
-| ENABLE_REDUCE_LOW_MID_TX_POWER | makes medium and low power settings even lower |
-| ENABLE_BYP_RAW_DEMODULATORS | additional BYP (bypass?) and RAW demodulation options, proved not to be very useful, but it is there if you want to experiment |
-| ENABLE_BLMIN_TMP_OFF | additional function for configurable buttons that toggles `BLMin` on and off wihout saving it to the EEPROM |
-| ENABLE_SCAN_RANGES | scan range mode for frequency scanning, see wiki for instructions (radio operation -> frequency scanning) |
-| ENABLE_PREVENT_TX | prevent TX in any case |
-| ENABLE_ARDF | enable ARDF features |
-|🧰 **DEBUGGING** ||
-| ENABLE_AM_FIX_SHOW_DATA| displays settings used by  AM-fix when AM transmission is received |
-| ENABLE_AGC_SHOW_DATA | displays AGC settings |
-| ENABLE_UART_RW_BK_REGS | adds 2 extra commands that allow to read and write BK4819 registers |
-|🧰 **COMPILER/LINKER OPTIONS**||
-| ENABLE_CLANG | **experimental, builds with clang instead of gcc (LTO will be disabled if you enable this) |
-| ENABLE_SWD | only needed if using CPU's SWD port (debugging/programming) |
-| ENABLE_OVERLAY | cpu FLASH stuff, not needed |
-| ENABLE_LTO | reduces size of compiled firmware but might break EEPROM reads (OVERLAY will be disabled if you enable this) |
 
 ## Compiler
 
