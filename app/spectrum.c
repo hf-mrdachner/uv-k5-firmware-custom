@@ -771,18 +771,10 @@ static void DeInitSpectrum() {
 static void OnKeyDown(uint8_t key) {
   switch (key) {
   case KEY_3:
-    if (0)
-      SelectNearestPreset(true);
-    settings.delayUS += 100;
-    SYSTEM_DelayMs(100);
-    redrawStatus = true;
+    SelectNearestPreset(true);
     break;
   case KEY_9:
-    if (0)
-      SelectNearestPreset(false);
-    settings.delayUS -= 100;
-    SYSTEM_DelayMs(100);
-    redrawStatus = true;
+    SelectNearestPreset(false);
     break;
   case KEY_1:
     UpdateScanStep(true);
@@ -1116,9 +1108,9 @@ static void RenderStill() {
   } else {
     sprintf(String, "S9+%u0", s - 9);
   }
-  UI_PrintStringSmallest(String, 4, 10, false, true);
+  UI_PrintStringSmallest(String, 4, 17, false, true);
   sprintf(String, "%d dBm", dbm);
-  UI_PrintStringSmallest(String, 32, 10, false, true);
+  UI_PrintStringSmallest(String, 32, 17, false, true);
 
   if (isTransmitting) {
     uint8_t afDB = BK4819_ReadRegister(0x6F) & 0b1111111;
@@ -1379,6 +1371,14 @@ static void AutomaticPresetChoose(uint32_t f) {
 
 void APP_RunSpectrum() {
   BackupRegisters();
+
+  // The base firmware boots with automatic AGC enabled (good for normal RX,
+  // wrong for a spectrum sweep: continuously re-normalizing gain compresses
+  // RSSI readings across frequencies during the fast per-step scan, which
+  // is what made the trigger-level line look frozen). Freeze gain for the
+  // duration of the scan; RestoreRegisters() (REG_7E is in
+  // registersToBackup[]) puts automatic AGC back on exit.
+  BK4819_SetAGC(false);
 
   // AM_fix_init();
 
