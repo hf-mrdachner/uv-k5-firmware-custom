@@ -12,11 +12,18 @@
 - Create and switch branches (`git checkout`, `git branch`)
 - Stage and commit changes (`git add`, `git commit`)
 - All local Git operations
+- Push feature/fix branches (not `main`) to `origin` and open PRs against `main` —
+  `main` has branch protection (PR required + `build` status check must pass), so this
+  is the only way changes reach it anyway; no need to ask before pushing a branch or
+  opening the PR itself.
 
 ## Not Allowed
-- `git push` – do not push to any remote repository
-- `git push --force` or any other remote operations
-- Automatically creating or merging pull requests
+- Direct push to `main` — moot anyway, branch protection rejects it (`non_fast_forward`
+  + `pull_request` + `required_status_checks` rules on the `main` ruleset), but don't
+  attempt to bypass it either.
+- `git push --force` to any branch
+- **Merging** a PR into `main` — always ask first, even if CI is green. Opening the PR
+  is fine without asking; merging is a separate, explicit decision each time.
 
 ## Code Style
 
