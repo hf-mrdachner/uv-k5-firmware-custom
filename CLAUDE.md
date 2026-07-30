@@ -16,6 +16,13 @@
   `main` has branch protection (PR required + `build` status check must pass), so this
   is the only way changes reach it anyway; no need to ask before pushing a branch or
   opening the PR itself.
+- **`gh` gotcha (bit us once, 2026-07-30):** because this repo has an `upstream` remote
+  (`reald/uv-k5-firmware-custom`), `gh pr create`/`gh issue create` without an explicit
+  `--repo` default to that *upstream* repo, not this fork — silently opening PRs/issues
+  against a third party. Fixed locally via `gh repo set-default
+  hf-mrdachner/uv-k5-firmware-custom` (persists in `.git/config`), but if that ever gets
+  reset, pass `--repo hf-mrdachner/uv-k5-firmware-custom` explicitly, or run
+  `gh repo set-default hf-mrdachner/uv-k5-firmware-custom` again before creating anything.
 
 ## Not Allowed
 - Direct push to `main` — moot anyway, branch protection rejects it (`non_fast_forward`

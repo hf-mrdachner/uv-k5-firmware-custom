@@ -12,6 +12,8 @@ jobs:
     steps:
       - name: base-devel
         run:  pacman -Syyu base-devel --noconfirm
+      - name: git
+        run:  pacman -Syyu git --noconfirm
 
       - name: Checkout
         uses: actions/checkout@v4
