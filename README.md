@@ -138,7 +138,14 @@ You need a quansheng programming cable with an integrated USB to serial converte
   - :warning: Do NOT flash V2 or V3 hardware devices with this flasher!
 - On linux [k5prog](https://github.com/nica-f/k5prog) can be used: Run `k5prog -b firmware.bin -F -YYY`
 - On windows [k5prog_win](https://github.com/OneOfEleven/k5prog-win/raw/refs/heads/main/k5prog_win.exe) can be used. (Choose `firmware.packed.bin`)
+  - :warning: Despite the name, this is a GUI tool, not a command-line one like its linux namesake.
 - Official quansheng flash tool (Windows only. Choose `firmware.packed.bin`)
+- `tools/k5flash.py` in this repo: an actual CLI flasher, no browser or GUI needed.
+  ```
+  pip install -r tools/requirements.txt
+  python tools/k5flash.py --list-ports        # find your programming cable's COM/tty port
+  python tools/k5flash.py -p COM10 firmware_uvk5_v1.packed.bin
+  ```
 
 #### Flash programs for UV-K5/6 hardware version 2
 - There is no working webflasher for this hardware version.
