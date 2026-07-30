@@ -37,6 +37,7 @@ typedef enum center_line_t center_line_t;
 
 extern center_line_t center_line;
 extern const int8_t dBmCorrTable[7];
+extern const char *VfoStateStr[];
 
 void UI_DisplayAudioBar(void);
 void UI_MAIN_TimeSlice500ms(void);

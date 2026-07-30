@@ -58,7 +58,7 @@ inline static void ACTION_1750() { ACTION_AlarmOr1750(true); };
 #endif
 
 #ifdef ENABLE_SPECTRUM
-#include "app/spectrum.h"
+extern void APP_RunSpectrum(void);
 #endif
 
 inline static void ACTION_ScanRestart() { ACTION_Scan(true); };

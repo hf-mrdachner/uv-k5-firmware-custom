@@ -818,6 +818,34 @@ void BK4819_SetRegValue(RegisterSpec s, uint16_t v) {
   BK4819_WriteRegister(s.num, reg | (v << s.offset));
 }
 
+uint16_t BK4819_GetRegValue(RegisterSpec s) {
+  return (BK4819_ReadRegister(s.num) >> s.offset) & s.mask;
+}
+
+void BK4819_TuneTo(uint32_t f, bool precise) {
+  (void)precise;
+  BK4819_SetFrequency(f);
+  BK4819_PickRXFilterPathBasedOnFrequency(f);
+}
+
+void BK4819_ToggleAFDAC(bool on) {
+  uint16_t reg = BK4819_ReadRegister(BK4819_REG_30);
+  if (on)
+    reg |= BK4819_REG_30_MASK_ENABLE_AF_DAC;
+  else
+    reg &= ~BK4819_REG_30_MASK_ENABLE_AF_DAC;
+  BK4819_WriteRegister(BK4819_REG_30, reg);
+}
+
+void BK4819_ToggleAFBit(bool on) {
+  uint16_t reg = BK4819_ReadRegister(BK4819_REG_47);
+  if (on)
+    reg |= (1u << 6);
+  else
+    reg &= ~(1u << 6);
+  BK4819_WriteRegister(BK4819_REG_47, reg);
+}
+
 void BK4819_RX_TurnOn(void)
 {
 	// DSP Voltage Setting = 1

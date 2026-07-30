@@ -42,15 +42,16 @@ typedef enum  {
 } FREQUENCY_Band_t;
 
 extern const freq_band_table_t frequencyBandTable[];
+extern const uint8_t num_freq_band_table;
 
 typedef enum {
 // standard steps
 	STEP_2_5kHz,
-	STEP_5kHz,
+	STEP_5_0kHz,
 	STEP_6_25kHz,
-	STEP_10kHz,
+	STEP_10_0kHz,
 	STEP_12_5kHz,
-	STEP_25kHz,
+	STEP_25_0kHz,
 	STEP_8_33kHz,
 // custom steps
 	STEP_0_01kHz,
@@ -58,18 +59,18 @@ typedef enum {
 	STEP_0_1kHz,
 	STEP_0_25kHz,
 	STEP_0_5kHz,
-	STEP_1kHz,
+	STEP_1_0kHz,
 	STEP_1_25kHz,
-	STEP_9kHz,
-	STEP_15kHz,
-	STEP_20kHz,
-	STEP_30kHz,
-	STEP_50kHz,
-	STEP_100kHz,
-	STEP_125kHz,
-	STEP_200kHz,
-	STEP_250kHz,
-	STEP_500kHz,
+	STEP_9_0kHz,
+	STEP_15_0kHz,
+	STEP_20_0kHz,
+	STEP_30_0kHz,
+	STEP_50_0kHz,
+	STEP_100_0kHz,
+	STEP_125_0kHz,
+	STEP_200_0kHz,
+	STEP_250_0kHz,
+	STEP_500_0kHz,
 	STEP_N_ELEM
 } STEP_Setting_t;
 

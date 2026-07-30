@@ -41,6 +41,7 @@
 #include "../settings.h"
 #include "../ui/battery.h"
 #include "../ui/helper.h"
+#include "../ui/main.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
@@ -51,6 +52,12 @@ static const uint8_t gStepSettingToIndex[] = {
     [STEP_2_5kHz] = 4,  [STEP_5_0kHz] = 5,  [STEP_6_25kHz] = 6,
     [STEP_10_0kHz] = 8, [STEP_12_5kHz] = 9, [STEP_25_0kHz] = 10,
     [STEP_8_33kHz] = 7,
+};
+
+static const uint16_t listenBWRegValues[] = {
+    0b0011011000101000, // 25
+    0b0111111100001000, // 12.5
+    0b0100100001011000, // 6.25
 };
 
 typedef enum State {
@@ -76,7 +83,7 @@ typedef struct SpectrumSettings {
 
   bool backlightState;
   BK4819_FilterBandwidth_t listenBw;
-  ModulationType modulationType;
+  ModulationMode_t modulationType;
   uint16_t delayUS;
 } SpectrumSettings;
 
@@ -110,76 +117,40 @@ typedef struct MovingAverage {
 } MovingAverage;
 
 typedef struct FreqPreset {
-  char name[16];
+  char name[8]; // max 7 chars + null; fits all BK4819-receivable band names
   uint32_t fStart;
   uint32_t fEnd;
   StepsCount stepsCountIndex;
   uint8_t stepSizeIndex;
-  ModulationType modulationType;
+  ModulationMode_t modulationType;
   BK4819_FilterBandwidth_t listenBW;
 } FreqPreset;
 
+// Presets below 18 MHz omitted: BK4819 hardware minimum is 18 MHz.
 static const FreqPreset freqPresets[] = {
-    {"160m Ham Band", 181000, 200000, STEPS_128, STEP_1_0kHz, MOD_USB,
-     BK4819_FILTER_BW_NARROWER},
-    {"80m Ham Band", 350000, 380000, STEPS_128, STEP_1_0kHz, MOD_USB,
-     BK4819_FILTER_BW_NARROWER},
-    {"40m Ham Band", 700000, 720000, STEPS_128, STEP_1_0kHz, MOD_USB,
-     BK4819_FILTER_BW_NARROWER},
-    {"30m Ham Band", 1010000, 1015000, STEPS_128, STEP_1_0kHz, MOD_USB,
-     BK4819_FILTER_BW_NARROWER},
-    {"20m Ham Band", 1400000, 1435000, STEPS_128, STEP_1_0kHz, MOD_USB,
-     BK4819_FILTER_BW_NARROWER},
-    {"16m Broadcast", 1748000, 1790000, STEPS_128, STEP_5_0kHz, MOD_AM,
-     BK4819_FILTER_BW_NARROW},
-    {"17m Ham Band", 1806800, 1816800, STEPS_128, STEP_1_0kHz, MOD_USB,
-     BK4819_FILTER_BW_NARROWER},
-    {"15m Broadcast", 1890000, 1902000, STEPS_128, STEP_5_0kHz, MOD_AM,
-     BK4819_FILTER_BW_NARROW},
-    {"15m Ham Band", 2100000, 2144990, STEPS_128, STEP_1_0kHz, MOD_USB,
-     BK4819_FILTER_BW_NARROWER},
-    {"13m Broadcast", 2145000, 2185000, STEPS_128, STEP_5_0kHz, MOD_AM,
-     BK4819_FILTER_BW_NARROW},
-    {"12m Ham Band", 2489000, 2499000, STEPS_128, STEP_1_0kHz, MOD_USB,
-     BK4819_FILTER_BW_NARROWER},
-    {"11m Broadcast", 2567000, 2610000, STEPS_128, STEP_5_0kHz, MOD_AM,
-     BK4819_FILTER_BW_NARROW},
-    {"CB", 2697500, 2799990, STEPS_128, STEP_5_0kHz, MOD_FM,
-     BK4819_FILTER_BW_NARROW},
-    {"10m Ham Band", 2800000, 2970000, STEPS_128, STEP_1_0kHz, MOD_USB,
-     BK4819_FILTER_BW_NARROWER},
-    {"6m Ham Band", 5000000, 5400000, STEPS_128, STEP_1_0kHz, MOD_USB,
-     BK4819_FILTER_BW_NARROWER},
-    {"Air Band Voice", 11800000, 13500000, STEPS_128, STEP_100_0kHz, MOD_AM,
-     BK4819_FILTER_BW_NARROW},
-    {"2m Ham Band", 14400000, 14800000, STEPS_128, STEP_25_0kHz, MOD_FM,
-     BK4819_FILTER_BW_WIDE},
-    {"Railway", 15175000, 15599990, STEPS_128, STEP_25_0kHz, MOD_FM,
-     BK4819_FILTER_BW_WIDE},
-    {"Sea", 15600000, 16327500, STEPS_128, STEP_25_0kHz, MOD_FM,
-     BK4819_FILTER_BW_WIDE},
-    {"Satcom", 24300000, 27000000, STEPS_128, STEP_5_0kHz, MOD_FM,
-     BK4819_FILTER_BW_WIDE},
-    {"River1", 30001250, 30051250, STEPS_64, STEP_12_5kHz, MOD_FM,
-     BK4819_FILTER_BW_NARROW},
-    {"River2", 33601250, 33651250, STEPS_64, STEP_12_5kHz, MOD_FM,
-     BK4819_FILTER_BW_NARROW},
-    {"LPD", 43307500, 43477500, STEPS_128, STEP_25_0kHz, MOD_FM,
-     BK4819_FILTER_BW_WIDE},
-    {"PMR", 44600625, 44620000, STEPS_32, STEP_6_25kHz, MOD_FM,
-     BK4819_FILTER_BW_NARROW},
-    {"FRS/GMRS 462", 46256250, 46272500, STEPS_16, STEP_12_5kHz, MOD_FM,
-     BK4819_FILTER_BW_NARROW},
-    {"FRS/GMRS 467", 46756250, 46771250, STEPS_16, STEP_12_5kHz, MOD_FM,
-     BK4819_FILTER_BW_NARROW},
-    {"LoRa WAN", 86400000, 86900000, STEPS_128, STEP_100_0kHz, MOD_FM,
-     BK4819_FILTER_BW_WIDE},
-    {"GSM900 UP", 89000000, 91500000, STEPS_128, STEP_100_0kHz, MOD_FM,
-     BK4819_FILTER_BW_WIDE},
-    {"GSM900 DOWN", 93500000, 96000000, STEPS_128, STEP_100_0kHz, MOD_FM,
-     BK4819_FILTER_BW_WIDE},
-    {"23cm Ham Band", 124000000, 130000000, STEPS_128, STEP_25_0kHz, MOD_FM,
-     BK4819_FILTER_BW_WIDE},
+    {"15mBC",  1890000,  1902000, STEPS_128, STEP_5_0kHz,   MODULATION_AM, BK4819_FILTER_BW_NARROW},
+    {"15mHam", 2100000,  2144990, STEPS_128, STEP_1_0kHz,   MODULATION_USB, BK4819_FILTER_BW_NARROWER},
+    {"13mBC",  2145000,  2185000, STEPS_128, STEP_5_0kHz,   MODULATION_AM, BK4819_FILTER_BW_NARROW},
+    {"12mHam", 2489000,  2499000, STEPS_128, STEP_1_0kHz,   MODULATION_USB, BK4819_FILTER_BW_NARROWER},
+    {"11mBC",  2567000,  2610000, STEPS_128, STEP_5_0kHz,   MODULATION_AM, BK4819_FILTER_BW_NARROW},
+    {"CB",     2697500,  2799990, STEPS_128, STEP_5_0kHz,   MODULATION_FM, BK4819_FILTER_BW_NARROW},
+    {"10mHam", 2800000,  2970000, STEPS_128, STEP_1_0kHz,   MODULATION_USB, BK4819_FILTER_BW_NARROWER},
+    {"6mHam",  5000000,  5400000, STEPS_128, STEP_1_0kHz,   MODULATION_USB, BK4819_FILTER_BW_NARROWER},
+    {"AirBand",11800000, 13500000,STEPS_128, STEP_100_0kHz, MODULATION_AM, BK4819_FILTER_BW_NARROW},
+    {"2mHam",  14400000, 14800000,STEPS_128, STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
+    {"Railway",15175000, 15599990,STEPS_128, STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
+    {"Sea",    15600000, 16327500,STEPS_128, STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
+    {"Satcom", 24300000, 27000000,STEPS_128, STEP_5_0kHz,   MODULATION_FM, BK4819_FILTER_BW_WIDE},
+    {"River1", 30001250, 30051250,STEPS_64,  STEP_12_5kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
+    {"River2", 33601250, 33651250,STEPS_64,  STEP_12_5kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
+    {"LPD",    43307500, 43477500,STEPS_128, STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
+    {"PMR",    44600625, 44620000,STEPS_32,  STEP_6_25kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
+    {"FRS 462",46256250, 46272500,STEPS_16,  STEP_12_5kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
+    {"FRS 467",46756250, 46771250,STEPS_16,  STEP_12_5kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
+    {"LoRaWAN",86400000, 86900000,STEPS_128, STEP_100_0kHz, MODULATION_FM, BK4819_FILTER_BW_WIDE},
+    {"GSM-UP", 89000000, 91500000,STEPS_128, STEP_100_0kHz, MODULATION_FM, BK4819_FILTER_BW_WIDE},
+    {"GSM-DN", 93500000, 96000000,STEPS_128, STEP_100_0kHz, MODULATION_FM, BK4819_FILTER_BW_WIDE},
+    {"23cmHam",124000000,130000000,STEPS_128,STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
 };
 
 #ifdef ENABLE_ALL_REGISTERS
@@ -364,6 +335,76 @@ static const RegisterSpec hiddenRegisterSpecs[] = {
 
 };
 #endif
+
+// Wrapper: set modulation (avoids circular dep between bk4819.h and radio.h)
+static inline void BK4819_SetModulation(ModulationMode_t m) {
+  RADIO_SetModulation(m);
+}
+
+// Apply TX frequency offset from VFO settings
+static inline uint32_t GetOffsetedF(VFO_Info_t *vfo, uint32_t f) {
+  switch (vfo->TX_OFFSET_FREQUENCY_DIRECTION) {
+  case TX_OFFSET_FREQUENCY_DIRECTION_ADD:
+    return f + vfo->TX_OFFSET_FREQUENCY;
+  case TX_OFFSET_FREQUENCY_DIRECTION_SUB:
+    return f - vfo->TX_OFFSET_FREQUENCY;
+  default:
+    return f;
+  }
+}
+
+// Identity mappings (no frequency transform needed in this implementation)
+static inline uint32_t GetTuneF(uint32_t f)  { return f; }
+static inline uint32_t GetScreenF(uint32_t f) { return f; }
+
+// TX allowed check
+static inline bool IsTXAllowed(uint32_t f) { return TX_freq_check(f) == 0; }
+
+// Draw a vertical line in the framebuffer at column x, from row y1 to y2
+static inline void DrawVLine(uint8_t x, uint8_t y1, uint8_t y2, bool black) {
+  UI_DrawLineBuffer(gFrameBuffer, x, y1, x, y2, black);
+}
+
+// Set/clear one pixel in the framebuffer (color=0 → white, color!=0 → black)
+static inline void PutPixel(uint8_t x, uint8_t y, uint8_t color) {
+  UI_DrawPixelBuffer(gFrameBuffer, x, y, color != 0);
+}
+
+// Render a string using the 3×5 pixel font.
+// x, y: top-left pixel in full-screen coordinates (0..63).
+//   y < 8  → render into gStatusLine
+//   y >= 8 → render into gFrameBuffer (framebuffer y = screen_y - 8)
+// align: currently unused (always left-aligned from x)
+// color: true = black text, false = white text (assumes background already filled)
+static inline void UI_PrintStringSmallest(const char *str, uint8_t x, uint8_t y,
+                                          bool align, bool color) {
+  (void)align;
+  for (uint8_t i = 0; str[i] != '\0'; i++) {
+    uint8_t ch = (uint8_t)str[i];
+    if (ch < 0x20 || ch > 0x7F)
+      continue;
+    uint8_t char_idx = ch - 0x20;
+    for (uint8_t col = 0; col < 3; col++) {
+      uint8_t col_data = gFont3x5[char_idx][col];
+      uint16_t px = x + i * 4 + col;
+      if (px >= 128)
+        break;
+      for (uint8_t row = 0; row < 5; row++) {
+        if ((col_data >> row) & 1u) {
+          uint8_t py = y + row;
+          if (py < 8) {
+            if (color)
+              gStatusLine[px] |= (1u << py);
+            else
+              gStatusLine[px] &= ~(1u << py);
+          } else {
+            UI_DrawPixelBuffer(gFrameBuffer, px, py - 8, color);
+          }
+        }
+      }
+    }
+  }
+}
 
 void APP_RunSpectrum(void);
 
