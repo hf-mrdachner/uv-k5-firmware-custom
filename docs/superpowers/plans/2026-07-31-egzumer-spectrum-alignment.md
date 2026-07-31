@@ -978,3 +978,278 @@ Specifically check: the squelch/trigger line responds to `*`/F (the original bug
 cd "$(git rev-parse --show-toplevel)"
 rm -f firmware_uvk5_v1 firmware_uvk5_v1.bin firmware_uvk5_v1.packed.bin
 ```
+
+---
+
+### Task 5: Restore automatic band-preset selection on entry
+
+**Context (found during Task 4's hardware verification):** egzumer's `APP_RunSpectrum()` has no equivalent to the old, pre-swap `freqPresets[]`/`ApplyPreset()`/`AutomaticPresetChoose()` — it just centers the scan window on whatever frequency the active VFO already has, using a generic default step size. The old code snapped to a curated, band-appropriate window (e.g. "2mHam" 144.4-148.0MHz, `S_STEP_25_0kHz`, `BK4819_FILTER_BW_WIDE`) automatically whenever the current frequency fell inside one. The user explicitly asked for this to come back, as an addition on top of egzumer's code — same pattern as Task 1's TX-preservation splice, not a redesign of egzumer's structure.
+
+Note: `KEY_3`/`KEY_9` stay exactly as Task 1 left them (`UpdateDBMax`) — this task is **only** about automatic selection on entry, not about restoring manual preset-switching via keypress (egzumer's own key layout has no room for it, and the user did not ask for it back).
+
+**Files:**
+- Modify: `app/spectrum.h` (add `FreqPreset` struct + `freqPresets[]` table)
+- Modify: `app/spectrum.c` (add `ApplyPreset`/`AutomaticPresetChoose`, patch `APP_RunSpectrum`)
+
+**Interfaces:**
+- Consumes: Tasks 1-3 complete (this builds on the already-swapped `app/spectrum.c`/`.h`).
+- Produces: `ApplyPreset(FreqPreset)` and `AutomaticPresetChoose(uint32_t)`, both `static`, used only within `app/spectrum.c`.
+
+- [ ] **Step 1: Add FreqPreset struct and freqPresets table to app/spectrum.h**
+
+Find (near the end of the `ScanStep` enum, right before `typedef struct SpectrumSettings`):
+
+```c
+typedef enum ScanStep {
+  S_STEP_0_01kHz,
+  S_STEP_0_1kHz,
+  S_STEP_0_5kHz,
+  S_STEP_1_0kHz,
+
+  S_STEP_2_5kHz,
+  S_STEP_5_0kHz,
+  S_STEP_6_25kHz,
+  S_STEP_8_33kHz,
+  S_STEP_10_0kHz,
+  S_STEP_12_5kHz,
+  S_STEP_15_0kHz,
+  S_STEP_20_0kHz,
+  S_STEP_25_0kHz,
+  S_STEP_50_0kHz,
+  S_STEP_100_0kHz,
+} ScanStep;
+
+typedef struct SpectrumSettings {
+```
+
+Replace with:
+
+```c
+typedef enum ScanStep {
+  S_STEP_0_01kHz,
+  S_STEP_0_1kHz,
+  S_STEP_0_5kHz,
+  S_STEP_1_0kHz,
+
+  S_STEP_2_5kHz,
+  S_STEP_5_0kHz,
+  S_STEP_6_25kHz,
+  S_STEP_8_33kHz,
+  S_STEP_10_0kHz,
+  S_STEP_12_5kHz,
+  S_STEP_15_0kHz,
+  S_STEP_20_0kHz,
+  S_STEP_25_0kHz,
+  S_STEP_50_0kHz,
+  S_STEP_100_0kHz,
+} ScanStep;
+
+typedef struct FreqPreset {
+  char name[8]; // max 7 chars + null; fits all BK4819-receivable band names
+  uint32_t fStart;
+  uint32_t fEnd;
+  StepsCount stepsCountIndex;
+  ScanStep stepSizeIndex;
+  ModulationMode_t modulationType;
+  BK4819_FilterBandwidth_t listenBW;
+} FreqPreset;
+
+// Presets below 18 MHz omitted: BK4819 hardware minimum is 18 MHz.
+static const FreqPreset freqPresets[] = {
+    {"15mBC",  1890000,  1902000, STEPS_128, S_STEP_5_0kHz,   MODULATION_AM, BK4819_FILTER_BW_NARROW},
+    {"15mHam", 2100000,  2144990, STEPS_128, S_STEP_1_0kHz,   MODULATION_USB, BK4819_FILTER_BW_NARROWER},
+    {"13mBC",  2145000,  2185000, STEPS_128, S_STEP_5_0kHz,   MODULATION_AM, BK4819_FILTER_BW_NARROW},
+    {"12mHam", 2489000,  2499000, STEPS_128, S_STEP_1_0kHz,   MODULATION_USB, BK4819_FILTER_BW_NARROWER},
+    {"11mBC",  2567000,  2610000, STEPS_128, S_STEP_5_0kHz,   MODULATION_AM, BK4819_FILTER_BW_NARROW},
+    {"CB",     2697500,  2799990, STEPS_128, S_STEP_5_0kHz,   MODULATION_FM, BK4819_FILTER_BW_NARROW},
+    {"10mHam", 2800000,  2970000, STEPS_128, S_STEP_1_0kHz,   MODULATION_USB, BK4819_FILTER_BW_NARROWER},
+    {"6mHam",  5000000,  5400000, STEPS_128, S_STEP_1_0kHz,   MODULATION_USB, BK4819_FILTER_BW_NARROWER},
+    {"AirBand",11800000, 13500000,STEPS_128, S_STEP_100_0kHz, MODULATION_AM, BK4819_FILTER_BW_NARROW},
+    {"2mHam",  14400000, 14800000,STEPS_128, S_STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
+    {"Railway",15175000, 15599990,STEPS_128, S_STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
+    {"Sea",    15600000, 16327500,STEPS_128, S_STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
+    {"Satcom", 24300000, 27000000,STEPS_128, S_STEP_5_0kHz,   MODULATION_FM, BK4819_FILTER_BW_WIDE},
+    {"River1", 30001250, 30051250,STEPS_64,  S_STEP_12_5kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
+    {"River2", 33601250, 33651250,STEPS_64,  S_STEP_12_5kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
+    {"LPD",    43307500, 43477500,STEPS_128, S_STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
+    {"PMR",    44600625, 44620000,STEPS_32,  S_STEP_6_25kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
+    {"FRS 462",46256250, 46272500,STEPS_16,  S_STEP_12_5kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
+    {"FRS 467",46756250, 46771250,STEPS_16,  S_STEP_12_5kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
+    {"LoRaWAN",86400000, 86900000,STEPS_128, S_STEP_100_0kHz, MODULATION_FM, BK4819_FILTER_BW_WIDE},
+    {"GSM-UP", 89000000, 91500000,STEPS_128, S_STEP_100_0kHz, MODULATION_FM, BK4819_FILTER_BW_WIDE},
+    {"GSM-DN", 93500000, 96000000,STEPS_128, S_STEP_100_0kHz, MODULATION_FM, BK4819_FILTER_BW_WIDE},
+    {"23cmHam",124000000,130000000,STEPS_128,S_STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
+};
+
+typedef struct SpectrumSettings {
+```
+
+(Byte-for-byte the same table this repo had before the egzumer swap, just with `STEP_*` constants renamed to egzumer's equivalent `S_STEP_*` names — same numeric frequencies, same step/bandwidth/modulation per band.)
+
+- [ ] **Step 2: Add ApplyPreset and AutomaticPresetChoose to app/spectrum.c**
+
+Find:
+
+```c
+void APP_RunSpectrum() {
+```
+
+Replace with:
+
+```c
+static void ApplyPreset(FreqPreset p) {
+  currentFreq = p.fStart;
+  settings.scanStepIndex = p.stepSizeIndex;
+  settings.listenBw = p.listenBW;
+  settings.modulationType = p.modulationType;
+  settings.stepsCount = p.stepsCountIndex;
+  RADIO_SetModulation(settings.modulationType);
+  RelaunchScan();
+  ResetBlacklist();
+  redrawScreen = true;
+  settings.frequencyChangeStep = GetBW();
+}
+
+static void AutomaticPresetChoose(uint32_t f) {
+  for (uint8_t i = 0; i < ARRAY_SIZE(freqPresets); ++i) {
+    const FreqPreset *p = &freqPresets[i];
+    if (f >= p->fStart && f <= p->fEnd) {
+      ApplyPreset(*p);
+    }
+  }
+}
+
+void APP_RunSpectrum() {
+```
+
+- [ ] **Step 3: Call AutomaticPresetChoose from APP_RunSpectrum, only in the non-scan-range path**
+
+Find:
+
+```c
+#ifdef ENABLE_SCAN_RANGES
+  if(gScanRangeStart) {
+    currentFreq = initialFreq = gScanRangeStart;
+    for(uint8_t i = 0; i < ARRAY_SIZE(scanStepValues); i++) {
+      if(scanStepValues[i] >= gTxVfo->StepFrequency) {
+        settings.scanStepIndex = i;
+        break;
+      }
+    }
+    settings.stepsCount = STEPS_128;
+  }
+  else
+#endif
+    currentFreq = initialFreq = gTxVfo->pRX->Frequency -
+                                ((GetStepsCount() / 2) * GetScanStep());
+
+  BackupRegisters();
+```
+
+Replace with:
+
+```c
+#ifdef ENABLE_SCAN_RANGES
+  if(gScanRangeStart) {
+    currentFreq = initialFreq = gScanRangeStart;
+    for(uint8_t i = 0; i < ARRAY_SIZE(scanStepValues); i++) {
+      if(scanStepValues[i] >= gTxVfo->StepFrequency) {
+        settings.scanStepIndex = i;
+        break;
+      }
+    }
+    settings.stepsCount = STEPS_128;
+  }
+  else
+#endif
+  {
+    currentFreq = initialFreq = gTxVfo->pRX->Frequency -
+                                ((GetStepsCount() / 2) * GetScanStep());
+    AutomaticPresetChoose(currentFreq);
+  }
+
+  BackupRegisters();
+```
+
+(An explicit scan-range selection via `chFrScanner`/`ENABLE_SCAN_RANGES` is a deliberate, narrower user choice — automatic band-preset selection must not override it, hence the `else` scoping.)
+
+- [ ] **Step 4: Build and verify**
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd)":/app uvk5-buildcheck /bin/bash -c "cd /app && make clean && make -j4"
+```
+
+Expected: clean build, `text+data` under 61440 bytes. The `freqPresets[]` table is the same size as before the swap (23 entries × ~20 bytes), so expect flash usage to grow by roughly that much from Task 3's numbers — still comfortably under budget based on prior measurements in this plan.
+
+- [ ] **Step 5: Sanity-check the host test suite still passes**
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd)":/app uvk5-hosttest /bin/bash /app/tools/host_tests/build.sh
+```
+
+This task doesn't touch anything the Task 3 tests directly exercise (`ApplyPreset`/`AutomaticPresetChoose` are only called from `APP_RunSpectrum`, which the host tests don't invoke — it has a real hardware `while` loop). Expected: still `PASSED (0 failures)`, unchanged from Task 3. If anything now fails, something in this task's changes had an unexpected effect on shared state (e.g. `settings` globals) — investigate rather than assume it's unrelated.
+
+- [ ] **Step 6: Commit**
+
+```bash
+git add app/spectrum.h app/spectrum.c
+git commit -m "$(cat <<'EOF'
+Restore automatic band-preset selection on spectrum entry
+
+egzumer's APP_RunSpectrum has no equivalent to the pre-swap
+freqPresets[]/ApplyPreset()/AutomaticPresetChoose() -- it just centers
+the scan window on the active VFO's frequency with a generic default
+step size, losing the curated per-band window (step size, bandwidth,
+modulation) the old code snapped to automatically. Restores the same
+byte-for-byte preset table (STEP_* renamed to egzumer's S_STEP_*
+equivalents) and wires AutomaticPresetChoose into the non-scan-range
+entry path only -- an explicit ENABLE_SCAN_RANGES selection is a more
+specific user choice and must not be overridden by it.
+
+Note: KEY_3/KEY_9 remain egzumer's UpdateDBMax (dB-range adjustment,
+from Task 1) -- this only restores automatic selection on entry, not
+manual preset-switching via keypress, which egzumer's key layout has
+no room for and which was not requested back.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+EOF
+)"
+```
+
+---
+
+### Task 6: Re-flash and confirm on real hardware
+
+**Files:** none (verification only)
+
+**Interfaces:**
+- Consumes: Task 5 complete.
+
+- [ ] **Step 1: Build the packed firmware**
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd)":/app uvk5-buildcheck /bin/bash -c "cd /app && make clean && make -j4"
+```
+
+- [ ] **Step 2: Ask the user to put the radio in bootloader mode, then flash**
+
+Same sequence as Task 4: power off → hold PTT → power on (white LED) → plug in cable. Confirm with the user before flashing. Check `python tools/k5flash.py --list-ports` for the current port (it has changed between sessions before — do not assume it's still the same COM port as last time).
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+python tools/k5flash.py -p <PORT> firmware_uvk5_v1.packed.bin
+```
+
+- [ ] **Step 3: Ask the user to verify**
+
+Specifically: does entering the spectrum screen on a frequency inside a known band (e.g. 2m ham, 144-148MHz) now automatically snap to that band's curated window (wide view, appropriate step size) instead of a narrow generic window centered on the exact current frequency? Confirm `*`/F, TX-from-STILL, and the other Task 4 checks are still fine (this task's changes are additive and shouldn't affect them, but confirm rather than assume).
+
+- [ ] **Step 4: Clean up build artifacts**
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+rm -f firmware_uvk5_v1 firmware_uvk5_v1.bin firmware_uvk5_v1.packed.bin
+```
