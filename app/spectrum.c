@@ -568,21 +568,6 @@ static void UpdateRssiTriggerLevel(bool inc) {
   redrawStatus = true;
 }
 
-static void UpdateDBMax(bool inc) {
-  if (inc && settings.dbMax < 10) {
-    settings.dbMax += 1;
-  } else if (!inc && settings.dbMax > 12+settings.dbMin) {
-    settings.dbMax -= 1;
-  } else {
-    return;
-  }
-
-  ClampRssiTriggerLevel();
-  redrawStatus = true;
-  redrawScreen = true;
-  SYSTEM_DelayMs(20);
-}
-
 static void UpdateScanStep(bool inc) {
   if (inc) {
     settings.scanStepIndex = settings.scanStepIndex != S_STEP_100_0kHz ? settings.scanStepIndex + 1 : 0;
@@ -787,13 +772,20 @@ static void DrawSpectrum() {
 }
 
 static void DrawStatus() {
-#ifdef SPECTRUM_EXTRA_VALUES
-  sprintf(String, "%d/%d P:%d T:%d", settings.dbMin, settings.dbMax,
-          Rssi2DBm(peak.rssi), Rssi2DBm(settings.rssiTriggerLevel));
-#else
-  sprintf(String, "%d/%d", settings.dbMin, settings.dbMax);
-#endif
-  GUI_DisplaySmallest(String, 0, 1, true, true);
+  // Recomputed live on every render (not cached at preset-match time) so it
+  // stays correct if the user manually retunes afterward -- same approach
+  // as the pre-swap fagci-based DrawStatus() this restores (git show
+  // 64f7cc8^:app/spectrum.c).
+  const FreqPreset *matchedPreset = NULL;
+  for (uint8_t i = 0; i < ARRAY_SIZE(freqPresets); ++i) {
+    if (currentFreq >= freqPresets[i].fStart && currentFreq <= freqPresets[i].fEnd) {
+      matchedPreset = &freqPresets[i];
+      break;
+    }
+  }
+  if (matchedPreset != NULL) {
+    GUI_DisplaySmallest(matchedPreset->name, 0, 1, true, true);
+  }
 
   BOARD_ADC_GetBatteryInfo(&gBatteryVoltages[gBatteryCheckCounter++ % 4],
                            &gBatteryCurrent);
@@ -911,13 +903,15 @@ static void DrawArrow(uint8_t x) {
   }
 }
 
+static void SelectNearestPreset(bool inc);
+
 static void OnKeyDown(uint8_t key) {
   switch (key) {
   case KEY_3:
-    UpdateDBMax(true);
+    SelectNearestPreset(true);
     break;
   case KEY_9:
-    UpdateDBMax(false);
+    SelectNearestPreset(false);
     break;
   case KEY_1:
     UpdateScanStep(true);
@@ -1033,12 +1027,6 @@ static void OnKeyDownFreqInput(uint8_t key) {
 
 void OnKeyDownStill(KEY_Code_t key) {
   switch (key) {
-  case KEY_3:
-    UpdateDBMax(true);
-    break;
-  case KEY_9:
-    UpdateDBMax(false);
-    break;
   case KEY_UP:
     if (menuState) {
       SetRegMenuValue(menuState, true);
@@ -1407,6 +1395,37 @@ static void ApplyPreset(FreqPreset p) {
   ResetBlacklist();
   redrawScreen = true;
   settings.frequencyChangeStep = GetBW();
+}
+
+// Restores the pre-swap fagci-based SelectNearestPreset() (git show
+// 64f7cc8^:app/spectrum.c): finds the next preset above (inc=true) or
+// below (inc=false) the current frequency and applies it, wrapping
+// around to the last/first preset respectively when there is none.
+static void SelectNearestPreset(bool inc) {
+  const FreqPreset *p = NULL;
+  const uint8_t SZ = ARRAY_SIZE(freqPresets);
+  if (inc) {
+    for (uint8_t i = 0; i < SZ; ++i) {
+      if (currentFreq < freqPresets[i].fStart) {
+        p = &freqPresets[i];
+        break;
+      }
+    }
+    if (p == NULL) {
+      p = &freqPresets[SZ - 1];
+    }
+  } else {
+    for (int i = SZ - 1; i >= 0; --i) {
+      if (currentFreq > freqPresets[i].fEnd) {
+        p = &freqPresets[i];
+        break;
+      }
+    }
+    if (p == NULL) {
+      p = &freqPresets[0];
+    }
+  }
+  ApplyPreset(*p);
 }
 
 static uint32_t GetPresetMatchFrequency(void) { return gTxVfo->pRX->Frequency; }

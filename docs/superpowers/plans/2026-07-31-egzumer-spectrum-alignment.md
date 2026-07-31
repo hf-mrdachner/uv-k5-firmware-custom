@@ -1399,3 +1399,416 @@ Specifically: tune the active VFO/channel to a frequency in the lower portion of
 cd "$(git rev-parse --show-toplevel)"
 rm -f firmware_uvk5_v1 firmware_uvk5_v1.bin firmware_uvk5_v1.packed.bin
 ```
+
+---
+
+### Task 9: Build scripted-key-injection test infra; prove or disprove why Task 7's fix still fails on hardware
+
+**Context (found after Task 8's hardware verification failed a third time):** Automatic band-preset selection still didn't work on real hardware after Task 7's fix, despite that fix being independently verified correct by code review and host tests twice. `APP_RunSpectrum()` has never been runnable end-to-end in the host test harness — it ends in a real `while (isInitialized) { Tick(); }` loop — so nothing has ever tested the actual entry path in full; only isolated pieces (`AutomaticPresetChoose`, `GetPresetMatchFrequency`) were ever tested directly, called manually with hand-picked arguments. This task closes that gap and investigates a specific, code-confirmed discrepancy between the host test build and the real firmware build (below), rather than proposing another unverified patch.
+
+**Investigation finding (confirmed by reading the code, not yet by a test):** `tools/host_tests/build.sh`'s `CFLAGS` does **not** define `ENABLE_SCAN_RANGES`, while the real firmware's `Makefile` defaults it to `1` (`ENABLE_SCAN_RANGES ?= 1`, `Makefile:43`). `app/spectrum.c` has several `#ifdef ENABLE_SCAN_RANGES` blocks, including the exact guard around the call this project has been fixing:
+
+```c
+#ifdef ENABLE_SCAN_RANGES
+  if (!gScanRangeStart)
+#endif
+    AutomaticPresetChoose(GetPresetMatchFrequency());
+```
+
+Without the flag, this compiles down to an unconditional call in the host test binary — meaning every previous host-test "pass" for Tasks 5 and 7 **never exercised this guard at all**, regardless of how correct the matching logic itself was. `gScanRangeStart`/`gScanRangeStop` (`app/chFrScanner.c`, toggled by `toggle_chan_scanlist()` in `app/main.c:58`, reset to 0 only in `app/app.c:1603` and `app/common.c:32`'s `COMMON_SwitchVFOs`) are exactly the kind of state that can persist across unrelated key presses in a real testing session — this task's tests directly confirm (or refute) whether that's what's happening, without assuming it.
+
+**Files:**
+- Modify: `tools/host_tests/build.sh` (add `-DENABLE_SCAN_RANGES` to `CFLAGS`, matching the real firmware default)
+- Modify: `tools/host_tests/stubs.c` (define `gScanRangeStart`/`gScanRangeStop`, normally supplied by the not-compiled-for-host-tests `app/chFrScanner.c`; make `KEYBOARD_Poll` scriptable)
+- Modify: `tools/host_tests/test_spectrum.c` (two new end-to-end tests that call the real `APP_RunSpectrum()`)
+
+**Interfaces:**
+- Consumes: Task 7 complete (this tests Task 7's fix end-to-end for the first time).
+- Produces: nothing new for other tasks to consume — this task's output is test coverage plus a definitive finding about root cause, which determines what Task 10 needs to fix (if anything code-level needs fixing at all).
+
+**This task does NOT fix anything.** Its sole job is to build the infra, add the two tests below exactly as specified, run them, and report the exact pass/fail result of each — including, if either test hangs instead of completing, precisely what state (`preventKeypress`, `currentState`, `scanInfo.i`/`.measurementsCount`, `kbd.current`/`.prev`/`.counter`) it was in when you had to interrupt it. Do not add a timeout/iteration cap inside `app/spectrum.c` to make a hang "go away" — a hang is itself a finding, not a bug to patch around, since the real hardware's own loop has no such cap either.
+
+- [ ] **Step 1: Align the host test build flags with the real firmware's default config**
+
+In `tools/host_tests/build.sh`, find:
+
+```bash
+CFLAGS="-I. -DPRINTF_INCLUDE_CONFIG_H -DENABLE_SPECTRUM -Wall -Wextra"
+```
+
+Replace with:
+
+```bash
+CFLAGS="-I. -DPRINTF_INCLUDE_CONFIG_H -DENABLE_SPECTRUM -DENABLE_SCAN_RANGES -Wall -Wextra"
+```
+
+- [ ] **Step 2: Add `gScanRangeStart`/`gScanRangeStop` definitions to stubs.c**
+
+These are normally defined in `app/chFrScanner.c`, which is not compiled into the host test binary. Step 1's flag now pulls in `app/chFrScanner.h`'s `extern` declarations (via `app/spectrum.c`'s own `#ifdef ENABLE_SCAN_RANGES #include "chFrScanner.h"`), so the link will fail without a definition somewhere.
+
+In `tools/host_tests/stubs.c`, add near the other globals (e.g. right after `gBatteryCheckCounter`):
+
+```c
+#ifdef ENABLE_SCAN_RANGES
+uint32_t gScanRangeStart;
+uint32_t gScanRangeStop;
+#endif
+```
+
+- [ ] **Step 3: Make KEYBOARD_Poll scriptable**
+
+Find:
+
+```c
+KEY_Code_t KEYBOARD_Poll(void) { return KEY_INVALID; }
+```
+
+Replace with:
+
+```c
+KEY_Code_t fake_next_key = KEY_INVALID;
+KEY_Code_t KEYBOARD_Poll(void) { return fake_next_key; }
+```
+
+No existing test calls `HandleUserInput()`/`Tick()`/`APP_RunSpectrum()`, so this default (`KEY_INVALID`, same as before) doesn't change any current test's behavior.
+
+- [ ] **Step 4: Build once to confirm Steps 1-3 link cleanly, before adding new tests**
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd)":/app uvk5-hosttest /bin/bash /app/tools/host_tests/build.sh
+```
+
+Expected: still `PASSED (0 failures)` — Steps 1-3 alone should not change any existing test's outcome (`ENABLE_SCAN_RANGES` only compiles in more self-contained code paths; nothing existing exercises them yet). If anything now fails to compile/link, that's a genuinely new missing symbol from turning the flag on — add a minimal stub for it in `stubs.c` following the existing pattern (no-op bodies for hardware writes, sensible fixed values for reads), then retry.
+
+- [ ] **Step 5: Add the end-to-end test for the normal (no active scan range) path**
+
+In `tools/host_tests/test_spectrum.c`, add `extern KEY_Code_t fake_next_key;` next to the existing `extern VFO_Info_t gVfoInfoStub;` near the top of the file.
+
+Then add this test (place it after `test_get_preset_match_frequency_returns_raw_vfo_frequency`):
+
+```c
+// ---------------------------------------------------------------------
+// End-to-end regression test: the REAL APP_RunSpectrum() -- not
+// AutomaticPresetChoose() called directly -- must apply a matching
+// preset on entry. Tasks 5 and 7 were both "verified clean" against
+// AutomaticPresetChoose() in isolation, and still failed on real
+// hardware three times; this closes the gap between "the matching
+// logic is correct" and "the real entry path actually reaches it and
+// nothing overwrites it afterward." Drives the real `while
+// (isInitialized) { Tick(); }` loop with a scripted KEY_EXIT so it
+// runs to completion and returns normally via the real
+// DeInitSpectrum(), the same way it would on hardware.
+// ---------------------------------------------------------------------
+static void test_app_run_spectrum_applies_preset_end_to_end(void) {
+    printf("\n-- test_app_run_spectrum_applies_preset_end_to_end --\n");
+
+    kbd = (KeyboardState){KEY_INVALID, KEY_INVALID, 0};
+    menuState = 0;
+    settings.rssiTriggerLevel = RSSI_MAX_VALUE; // scan always runs to completion
+    gEeprom.TX_VFO = 0;
+
+#ifdef ENABLE_SCAN_RANGES
+    gScanRangeStart = 0;
+    gScanRangeStop = 0;
+#endif
+
+    gVfoInfoStub.freq_config_RX.Frequency = 14450000; // 144.50000 MHz, inside 2mHam
+    gVfoInfoStub.pRX = &gVfoInfoStub.freq_config_RX;
+    gVfoInfoStub.Modulation = MODULATION_USB; // deliberately NOT 2mHam's FM, so a match is visible
+
+    fake_next_key = KEY_EXIT;
+
+    APP_RunSpectrum(); // real entry point, blocks until it exits via KEY_EXIT
+
+    fake_next_key = KEY_INVALID;
+
+    CHECK(currentFreq == 14400000); // 2mHam's fStart
+    CHECK(settings.scanStepIndex == S_STEP_25_0kHz);
+    CHECK(settings.stepsCount == STEPS_128);
+    CHECK(settings.modulationType == MODULATION_FM); // overwritten by ApplyPreset, not left as USB
+    CHECK(settings.listenBw == BK4819_FILTER_BW_WIDE);
+}
+```
+
+- [ ] **Step 6: Add the end-to-end test for the ledger's gScanRangeStart hypothesis**
+
+Add directly after the test from Step 5:
+
+```c
+#ifdef ENABLE_SCAN_RANGES
+// ---------------------------------------------------------------------
+// Regression test for the ledger's unconfirmed hypothesis: a nonzero
+// gScanRangeStart left over from an earlier toggle_chan_scanlist()
+// press (app/main.c) makes APP_RunSpectrum's `if (!gScanRangeStart)`
+// guard skip AutomaticPresetChoose entirely, even when the VFO
+// frequency sits inside a well-defined preset's range. This does NOT
+// prove gScanRangeStart is actually nonzero on the real device -- only
+// the code's behavior IF it were.
+// ---------------------------------------------------------------------
+static void test_app_run_spectrum_skips_preset_when_scan_range_active(void) {
+    printf("\n-- test_app_run_spectrum_skips_preset_when_scan_range_active --\n");
+
+    kbd = (KeyboardState){KEY_INVALID, KEY_INVALID, 0};
+    menuState = 0;
+    settings.rssiTriggerLevel = RSSI_MAX_VALUE;
+    gEeprom.TX_VFO = 0;
+
+    gScanRangeStart = 14500000; // 145.00000 MHz -- an active scan range
+    gScanRangeStop  = 14550000; // 145.50000 MHz (0.5MHz wide)
+
+    // VFO frequency is still inside 2mHam's range, same as the test above --
+    // if the guard works as coded, this must make NO difference here.
+    gVfoInfoStub.freq_config_RX.Frequency = 14450000;
+    gVfoInfoStub.pRX = &gVfoInfoStub.freq_config_RX;
+    gVfoInfoStub.Modulation = MODULATION_AM; // NOT 2mHam's FM
+    gVfoInfoStub.StepFrequency = 1250; // picks S_STEP_12_5kHz below, NOT 2mHam's S_STEP_25_0kHz
+
+    fake_next_key = KEY_EXIT;
+
+    APP_RunSpectrum();
+
+    fake_next_key = KEY_INVALID;
+    gScanRangeStart = 0;
+    gScanRangeStop = 0;
+
+    CHECK(currentFreq == 14500000); // gScanRangeStart's own value, NOT 2mHam's fStart (14400000)
+    CHECK(settings.scanStepIndex == S_STEP_12_5kHz); // the scan-range path's own step, NOT 2mHam's S_STEP_25_0kHz
+    CHECK(settings.modulationType == MODULATION_AM); // NOT overwritten to 2mHam's FM -- confirms ApplyPreset never ran
+}
+#endif
+```
+
+Update `main()` to call both new tests, after the existing ones:
+
+```c
+    test_app_run_spectrum_applies_preset_end_to_end();
+#ifdef ENABLE_SCAN_RANGES
+    test_app_run_spectrum_skips_preset_when_scan_range_active();
+#endif
+```
+
+- [ ] **Step 7: Build and run, with a wall-clock safety net while iterating**
+
+The test binary itself has no way to interrupt a hung `APP_RunSpectrum()` call from the outside — it's a real, unbounded `while` loop. While iterating, wrap the run in an external timeout so a wrong assumption doesn't hang your shell indefinitely:
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+timeout 60 docker run --rm -v "$(pwd)":/app uvk5-hosttest /bin/bash /app/tools/host_tests/build.sh
+```
+
+If it times out, do not add a cap inside `app/spectrum.c` — instead add temporary `printf` diagnostics (`scanInfo.i`, `scanInfo.measurementsCount`, `preventKeypress`, `kbd.counter`) inside `Tick()` or the new test itself (e.g. a bounded diagnostic loop calling `Tick()` manually up to a few thousand times with prints every 100 iterations, in a scratch copy, to see exactly where it's stuck), figure out why it didn't terminate as expected, fix the test's setup to match reality, remove the diagnostics, and retry. Report exactly what you found either way.
+
+Expected once both new tests are added and passing: `PASSED (0 failures)`, all existing tests plus these two.
+
+- [ ] **Step 8: Report findings precisely**
+
+In the report, state plainly:
+1. Did `test_app_run_spectrum_applies_preset_end_to_end` pass?
+2. Did `test_app_run_spectrum_skips_preset_when_scan_range_active` pass?
+3. Given both results, does the code's real entry path (`APP_RunSpectrum`, exactly as committed after Task 7) correctly apply a matching preset when `gScanRangeStart == 0`, and correctly skip it when `gScanRangeStart != 0`? Answer this directly — this is the fact Task 10 will act on, not a guess.
+
+- [ ] **Step 9: Commit**
+
+```bash
+git add tools/host_tests/
+git commit -m "$(cat <<'EOF'
+Add end-to-end test coverage for APP_RunSpectrum's real entry path
+
+Tasks 5 and 7 both verified AutomaticPresetChoose()/GetPresetMatchFrequency()
+correct in isolation, called directly with hand-picked arguments, and both
+still failed on real hardware -- because nothing had ever run the real
+APP_RunSpectrum() entry path end-to-end: it ends in a genuine
+while(isInitialized) hardware loop, previously untestable on the host.
+
+Adds scripted key injection (KEYBOARD_Poll is now a controllable global)
+so a test can drive that real loop to completion via a scripted KEY_EXIT
+and exit cleanly through the real DeInitSpectrum(), then two tests: one
+confirming the real entry path applies a preset end-to-end, and one
+testing the ledger's standing hypothesis that a nonzero gScanRangeStart
+left over from toggle_chan_scanlist() (app/main.c) silently skips preset
+selection via APP_RunSpectrum's `if (!gScanRangeStart)` guard.
+
+Also fixes a build-config gap: tools/host_tests/build.sh never defined
+ENABLE_SCAN_RANGES, while the real firmware's Makefile defaults it to 1
+-- meaning every #ifdef ENABLE_SCAN_RANGES block in app/spectrum.c,
+including this exact guard, was silently compiled OUT of every previous
+host test run, regardless of how correct the code inside it was.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+EOF
+)"
+```
+
+---
+
+### Task 10: Diagnose gScanRangeStart on real hardware, then fix accordingly
+
+**Context:** Task 9 proved `AutomaticPresetChoose`/`ApplyPreset`/`GetPresetMatchFrequency` and the `APP_RunSpectrum` call site correct end-to-end in host tests — the real entry path, driven through its genuine hardware loop, correctly applies a matching preset when `gScanRangeStart == 0` and correctly skips it when `gScanRangeStart != 0`. Task 9 made **no changes to `app/spectrum.c`**, so the firmware already flashed after Task 7/8 is unchanged and still valid for this check — no rebuild is needed just to test the hypothesis below.
+
+The leading remaining explanation for three straight hardware failures despite three independently-verified-correct fixes: `gScanRangeStart` (`app/chFrScanner.c`) is genuinely stuck non-zero on the device. It's toggled by `toggle_chan_scanlist()`, bound to **F+7** by default in this build (`app/main.c:238`, since `ENABLE_VOX` defaults to `0`), and reset only by **F+2** (`COMMON_SwitchVFOs`, `app/main.c:176`/`app/common.c:32`) or a specific `app/app.c:1603` trigger. Spectrum entry itself is **F+5** (`app/main.c:217-219`). If F+7 was pressed at any point during this project's many hardware test sessions and F+2 (or the app.c:1603 trigger) never fired since, `gScanRangeStart` would still be stuck on today. `ui/main.c:365-369` displays a frequency-range readout on the **main VFO screen** whenever `gScanRangeStart` is nonzero — directly checkable by eye, no flashing required.
+
+**This task is primarily an interactive, controller-led hardware session with the user — not a subagent-dispatchable implementation task.** The controller drives Steps 1-3 directly with the user in real time; only Step 4 (if code changes turn out to be needed at all) may warrant an implementer dispatch, and only after the branch it depends on is resolved live.
+
+- [ ] **Step 1: Check the main VFO screen for an active scan range, before touching the spectrum screen**
+
+Ask the user to power on the radio (no reflash needed) and look at the main VFO screen. Does it show a frequency-range readout (two frequencies, e.g. "144.xxx" / "148.xxx") instead of the normal single-frequency/channel display?
+
+- [ ] **Step 2a: If a scan range IS showing — this was it**
+
+Ask the user to press **F+2** (or press F+7 again to toggle it back off — either clears `gScanRangeStart`), confirm the main screen returns to normal, then enter the spectrum screen (F+5) on a frequency inside a known band (e.g. 144-148MHz) and confirm automatic preset selection now works. If it does: **no code change is needed** — this was stale device state, not a firmware bug. Skip to Step 5 (close out).
+
+- [ ] **Step 2b: If no scan range is showing — the hypothesis is refuted**
+
+`gScanRangeStart == 0`, matching the "should work" branch Task 9 proved correct — yet the user still needs to confirm current behavior on hardware (rebuild + flash HEAD first, since nothing has been flashed since Task 7/8 if the answer to Step 1 was "haven't flashed yet"). Re-run Task 4/6/8's verification steps (build, flash, check band-preset auto-selection on entry). If it now works: something about the device's prior state (not code) was the cause after all — close out via Step 5, note what changed. If it still fails with `gScanRangeStart` confirmed at 0: this is genuinely new information the host tests didn't anticipate — do not guess at another patch. Add temporary diagnostic output (same technique as Task 8's abandoned attempt, but informed this time by knowing the guard itself is not the problem) or walk the actual VFO/frequency values live with the user to find what really differs between the hardware and the host test's assumptions (e.g. `gTxVfo->pRX->Frequency` not being what's expected, `ENABLE_SCAN_RANGES` build flag mismatch between this repo's real Makefile and what was assumed, a stale/wrong firmware image). Report findings back before proposing any fix.
+
+- [ ] **Step 3: If a code fix does turn out to be needed (only reachable via 2b's dead end)**
+
+Write precise steps here once the real cause is known — do not pre-guess them now.
+
+- [ ] **Step 4: Build, flash, and get the user's hardware confirmation** (standard pattern from Tasks 4/6/8: build via `uvk5-buildcheck`, confirm bootloader entry sequence with the user, check `python tools/k5flash.py --list-ports` for the current port, flash, ask the user to verify, clean up build artifacts).
+
+- [ ] **Step 5: Close out** — update the ledger with the confirmed root cause (device state vs. code bug), and if no code changed, note that explicitly rather than leaving Task 10 looking like a no-op.
+
+**Resolution:** confirmed device state, not a code bug. The radio was running Task 8's abandoned debug-code build (never rebuilt/reflashed after the source-level `git checkout` revert), explaining both the on-screen collision and the user's impression that the preset wasn't applying. Rebuilding the current clean commit and reflashing resolved it immediately — hardware now shows exactly the predicted 2mHam window (144.00000-147.20000MHz, 3200.00k span, FM, WIDE, 128×25.00kHz), matching Task 9's host-test predictions exactly. No `app/spectrum.c` change was needed.
+
+---
+
+### Task 11: Restore the matched preset's name on the SPECTRUM status line
+
+**Context:** While confirming Task 10's fix on hardware, the user noted the status line has no indication of *which* band preset matched (expected e.g. `"2mHam"` in the top-left, where `dbMin`/`dbMax` is currently shown instead). Checked the pre-swap (fagci-based) `app/spectrum.c` (`git show 64f7cc8^:app/spectrum.c`, `DrawStatus()`): it computed this live on every render — scan `freqPresets[]` for whichever entry's `[fStart, fEnd)` contains the current display frequency, and draw `p->name` at the status line's `(0, 0)`. This was dropped entirely during Task 1's wholesale replacement of `spectrum.c` with egzumer's version (which has no preset concept at all) and never re-added when Task 5 restored `ApplyPreset`/`AutomaticPresetChoose` — Task 5 only restored the *selection* logic, not this *display* of what was selected. Not a bug — a feature gap nobody had explicitly scoped until now.
+
+**Files:**
+- Modify: `app/spectrum.c` (`DrawStatus()`)
+- Modify: `tools/host_tests/test_spectrum.c` (new test)
+
+**Interfaces:**
+- Consumes: Task 10 complete (no dependency on Task 10's specific findings, just sequenced after).
+- Produces: nothing new for other tasks.
+
+- [ ] **Step 1: Add the live preset-name lookup and draw call to DrawStatus()**
+
+Find (in `app/spectrum.c`):
+
+```c
+static void DrawStatus() {
+#ifdef SPECTRUM_EXTRA_VALUES
+  sprintf(String, "%d/%d P:%d T:%d", settings.dbMin, settings.dbMax,
+          Rssi2DBm(peak.rssi), Rssi2DBm(settings.rssiTriggerLevel));
+#else
+  sprintf(String, "%d/%d", settings.dbMin, settings.dbMax);
+#endif
+  GUI_DisplaySmallest(String, 0, 1, true, true);
+```
+
+Replace with:
+
+```c
+static void DrawStatus() {
+#ifdef SPECTRUM_EXTRA_VALUES
+  sprintf(String, "%d/%d P:%d T:%d", settings.dbMin, settings.dbMax,
+          Rssi2DBm(peak.rssi), Rssi2DBm(settings.rssiTriggerLevel));
+#else
+  sprintf(String, "%d/%d", settings.dbMin, settings.dbMax);
+#endif
+  GUI_DisplaySmallest(String, 0, 1, true, true);
+
+  // Recomputed live on every render (not cached at preset-match time) so it
+  // stays correct if the user manually retunes afterward -- same approach
+  // as the pre-swap fagci-based DrawStatus() this restores (git show
+  // 64f7cc8^:app/spectrum.c).
+  const FreqPreset *matchedPreset = NULL;
+  for (uint8_t i = 0; i < ARRAY_SIZE(freqPresets); ++i) {
+    if (currentFreq >= freqPresets[i].fStart && currentFreq <= freqPresets[i].fEnd) {
+      matchedPreset = &freqPresets[i];
+      break;
+    }
+  }
+  if (matchedPreset != NULL) {
+    GUI_DisplaySmallest(matchedPreset->name, 48, 1, true, true);
+  }
+```
+
+(Position `x=48` sits in the status line's unused middle ground: the `dbMin/dbMax` text at `x=0` is at most ~8 characters wide at 3px/char, well clear of 48; the battery icon starts at `x=116`. `freqPresets[].name` is capped at 7 chars + null, so even the longest name fits.)
+
+- [ ] **Step 2: Add a regression test**
+
+In `tools/host_tests/test_spectrum.c`, add:
+
+```c
+// ---------------------------------------------------------------------
+// Regression test: DrawStatus() must show the matched preset's name on
+// the status line, restoring behavior dropped during the egzumer swap
+// (Task 1) and never re-added when preset selection itself was restored
+// (Task 5). Checks gStatusLine directly rather than parsing glyphs --
+// confirms *something* is drawn at the expected column when a preset
+// matches, and nothing is when it doesn't.
+// ---------------------------------------------------------------------
+static void test_draw_status_shows_matched_preset_name(void) {
+    printf("\n-- test_draw_status_shows_matched_preset_name --\n");
+
+    memset(gStatusLine, 0, sizeof(gStatusLine));
+    currentFreq = 14450000; // 144.50000 MHz, inside 2mHam (144.00000-148.00000)
+    settings.dbMin = -130;
+    settings.dbMax = -50;
+
+    DrawStatus();
+
+    int name_area_has_content = 0;
+    for (int c = 48; c < 48 + 21; c++) { // ~7 chars * 3px
+        if (gStatusLine[c] != 0) name_area_has_content = 1;
+    }
+    CHECK(name_area_has_content);
+
+    memset(gStatusLine, 0, sizeof(gStatusLine));
+    currentFreq = 20000000; // 200.00000 MHz, outside every preset's range
+    DrawStatus();
+
+    int name_area_has_content_no_match = 0;
+    for (int c = 48; c < 48 + 21; c++) {
+        if (gStatusLine[c] != 0) name_area_has_content_no_match = 1;
+    }
+    CHECK(!name_area_has_content_no_match);
+}
+```
+
+Add the call to `main()`, after the existing tests.
+
+- [ ] **Step 3: Build and verify**
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd)":/app uvk5-buildcheck /bin/bash -c "cd /app && make clean && make -j4"
+MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd)":/app uvk5-hosttest /bin/bash /app/tools/host_tests/build.sh
+```
+
+Expected: ARM build clean, `text+data` still under 61440 bytes. Host tests `PASSED (0 failures)` including the new test.
+
+- [ ] **Step 4: Flash and confirm on hardware**
+
+Build the packed firmware, confirm bootloader entry with the user, check `python tools/k5flash.py --list-ports` for the current port (it has changed between sessions in this project before — most recently to COM12, a CH340 device distinguishable from other enumerated ports by name), flash, and ask the user to verify: entering the spectrum screen on a frequency inside a known band now shows that band's name (e.g. `"2mHam"`) on the status line, without colliding with the `dbMin/dbMax` text or the battery icon. Clean up build artifacts afterward.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add app/spectrum.c tools/host_tests/test_spectrum.c
+git commit -m "$(cat <<'EOF'
+Restore the matched preset's name on the SPECTRUM status line
+
+Dropped during Task 1's wholesale replacement of spectrum.c with
+egzumer's version (which has no preset concept), and never re-added
+when Task 5 restored ApplyPreset/AutomaticPresetChoose -- that task
+only restored preset *selection*, not this display of what was
+selected. Restores the pre-swap fagci-based DrawStatus()'s approach
+(git show 64f7cc8^:app/spectrum.c): scan freqPresets[] live against
+the current display frequency on every render, so it stays correct
+across manual retuning, not just at the moment a preset first matched.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+EOF
+)"
+```
+
+**Addendum (decided live during hardware verification, same session):** confirming the name label on hardware, the user noticed KEY_3/KEY_9 no longer switch bands (Task 1's egzumer swap had repurposed them to `UpdateDBMax`, adjusting `settings.dbMax`; Task 5 explicitly kept that repurposing). Asked the user directly whether they wanted the old manual band-switching back, giving up the dB-range adjustment — confirmed yes, and additionally: stop displaying `dbMin`/`dbMax` on the status line at all (freeing `x=0` for the preset name, moved there from `x=48` to match the pre-swap original's position more closely — also addresses the user's "not as in the original" observation about the name's position).
+
+Implemented directly in this same task (not spun off separately, since it's tightly coupled to what Task 11 already touches): removed `UpdateDBMax()` entirely (both its `OnKeyDown`/SPECTRUM-state and `OnKeyDownStill` call sites — the STILL-screen binding didn't exist in the pre-swap code either, so it's dropped rather than repointed), added `SelectNearestPreset(bool inc)` (restored from `git show 64f7cc8^:app/spectrum.c`, adapted to use `currentFreq` directly since the current code has no `GetScreenF()` equivalent), wired it to `KEY_3`/`KEY_9` in `OnKeyDown`, and removed the `dbMin`/`dbMax` status-line readout (both the normal and `SPECTRUM_EXTRA_VALUES` debug-build variants). Host test `test_key3_key9_adjusts_db_range` replaced with `test_key3_key9_selects_nearest_preset`; `test_draw_status_shows_matched_preset_name` updated for the `x=0` position. Host tests and hardware both confirmed working.

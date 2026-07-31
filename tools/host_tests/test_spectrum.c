@@ -53,23 +53,32 @@ static int failures = 0;
 } while (0)
 
 // ---------------------------------------------------------------------
-// Regression test: KEY_3 / KEY_9 must adjust the dB display range
-// (settings.dbMax), via UpdateDBMax(). Band presets no longer exist in
-// egzumer's implementation -- this replaces the old band-switch test.
+// Regression test: KEY_3 / KEY_9 must select the next/previous preset
+// via SelectNearestPreset(), restoring the pre-swap fagci-based
+// behavior (git show 64f7cc8^:app/spectrum.c). Superseded by user
+// request: KEY_3/KEY_9 previously adjusted the dB display range via
+// UpdateDBMax() (see Task 5's plan notes), but the user decided to give
+// that up in favor of restoring manual band switching, and to stop
+// displaying dbMin/dbMax on the status line entirely -- UpdateDBMax()
+// and its display are both removed now.
 // ---------------------------------------------------------------------
-static void test_key3_key9_adjusts_db_range(void) {
-    printf("\n-- test_key3_key9_adjusts_db_range --\n");
+static void test_key3_key9_selects_nearest_preset(void) {
+    printf("\n-- test_key3_key9_selects_nearest_preset --\n");
 
-    settings.dbMin = -130;
-    settings.dbMax = -50;
+    // Between 13mBC (ends 2185000) and 12mHam (starts 2489000).
+    currentFreq = 2300000;
 
-    int before = settings.dbMax;
-    OnKeyDown(KEY_3); // UpdateDBMax(true)
-    CHECK(settings.dbMax == before + 1);
+    OnKeyDown(KEY_3); // SelectNearestPreset(true) -- next preset above
+    CHECK(currentFreq == 2489000); // 12mHam's fStart
+    CHECK(settings.scanStepIndex == S_STEP_1_0kHz);
+    CHECK(settings.modulationType == MODULATION_USB);
+    CHECK(settings.listenBw == BK4819_FILTER_BW_NARROWER);
 
-    int afterUp = settings.dbMax;
-    OnKeyDown(KEY_9); // UpdateDBMax(false)
-    CHECK(settings.dbMax == afterUp - 1);
+    OnKeyDown(KEY_9); // SelectNearestPreset(false) -- previous preset below
+    CHECK(currentFreq == 2145000); // 13mBC's fStart
+    CHECK(settings.scanStepIndex == S_STEP_5_0kHz);
+    CHECK(settings.modulationType == MODULATION_AM);
+    CHECK(settings.listenBw == BK4819_FILTER_BW_NARROW);
 }
 
 // ---------------------------------------------------------------------
@@ -407,8 +416,43 @@ static void test_app_run_spectrum_skips_preset_when_scan_range_active(void) {
 }
 #endif
 
+// ---------------------------------------------------------------------
+// Regression test: DrawStatus() must show the matched preset's name on
+// the status line, restoring behavior dropped during the egzumer swap
+// (Task 1) and never re-added when preset selection itself was restored
+// (Task 5). Checks gStatusLine directly rather than parsing glyphs --
+// confirms *something* is drawn at the expected column when a preset
+// matches, and nothing is when it doesn't.
+// ---------------------------------------------------------------------
+static void test_draw_status_shows_matched_preset_name(void) {
+    printf("\n-- test_draw_status_shows_matched_preset_name --\n");
+
+    memset(gStatusLine, 0, sizeof(gStatusLine));
+    currentFreq = 14450000; // 144.50000 MHz, inside 2mHam (144.00000-148.00000)
+    settings.dbMin = -130;
+    settings.dbMax = -50;
+
+    DrawStatus();
+
+    int name_area_has_content = 0;
+    for (int c = 0; c < 21; c++) { // ~7 chars * 3px
+        if (gStatusLine[c] != 0) name_area_has_content = 1;
+    }
+    CHECK(name_area_has_content);
+
+    memset(gStatusLine, 0, sizeof(gStatusLine));
+    currentFreq = 20000000; // 200.00000 MHz, outside every preset's range
+    DrawStatus();
+
+    int name_area_has_content_no_match = 0;
+    for (int c = 0; c < 21; c++) {
+        if (gStatusLine[c] != 0) name_area_has_content_no_match = 1;
+    }
+    CHECK(!name_area_has_content_no_match);
+}
+
 int main(void) {
-    test_key3_key9_adjusts_db_range();
+    test_key3_key9_selects_nearest_preset();
     test_still_screen_no_collision();
     test_spectrum_scan_finds_peak();
     test_spectrum_arrow_text_collision();
@@ -418,6 +462,7 @@ int main(void) {
 #ifdef ENABLE_SCAN_RANGES
     test_app_run_spectrum_skips_preset_when_scan_range_active();
 #endif
+    test_draw_status_shows_matched_preset_name();
 
     printf("\n%s (%d failure%s)\n", failures ? "FAILED" : "PASSED",
            failures, failures == 1 ? "" : "s");
