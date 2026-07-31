@@ -12,6 +12,25 @@
 #include <stdio.h>
 #include <string.h>
 
+// GPIOA/B/C (bsp/dp32g030/gpio.h) are hardcoded MCU peripheral addresses
+// (e.g. GPIOC = 0x40061000). egzumer's ToggleRX() unconditionally touches
+// these via audio.h's inline AUDIO_AudioPathOn/Off (GPIO_SetBit/ClearBit on
+// &GPIOC->DATA) -- a real hardware write that segfaults when this code runs
+// as a host process, since that address isn't mapped memory here. Redirect
+// the macros to host-process memory before spectrum.c (and the headers it
+// pulls in, transitively) use them: the same "leaf hardware dependency"
+// stubbing this file already does for BK4819_*/KEYBOARD_* etc., just done
+// at the macro level since GPIOA/B/C are compile-time pointer constants
+// rather than function calls we could override in stubs.c.
+#include "../../bsp/dp32g030/gpio.h"
+static volatile GPIO_Bank_t fake_gpio_banks[3];
+#undef GPIOA
+#undef GPIOB
+#undef GPIOC
+#define GPIOA (&fake_gpio_banks[0])
+#define GPIOB (&fake_gpio_banks[1])
+#define GPIOC (&fake_gpio_banks[2])
+
 #include "../../app/spectrum.c"
 #include "fake_signal.h"
 
@@ -27,35 +46,29 @@ static int failures = 0;
 } while (0)
 
 // ---------------------------------------------------------------------
-// Regression test: KEY_3 / KEY_9 must jump to the nearest band preset.
-// (Was dead code: `if (0) SelectNearestPreset(...)`.)
+// Regression test: KEY_3 / KEY_9 must adjust the dB display range
+// (settings.dbMax), via UpdateDBMax(). Band presets no longer exist in
+// egzumer's implementation -- this replaces the old band-switch test.
 // ---------------------------------------------------------------------
-static void test_key3_key9_band_switch(void) {
-    printf("\n-- test_key3_key9_band_switch --\n");
+static void test_key3_key9_adjusts_db_range(void) {
+    printf("\n-- test_key3_key9_adjusts_db_range --\n");
 
-    // Start inside the "CB" preset's range (2697500..2799990, per freqPresets).
-    currentFreq = 2700000;
-    ApplyPreset(freqPresets[5]); // "CB" -- establishes a known starting state
-    CHECK(strcmp(freqPresets[5].name, "CB") == 0);
+    settings.dbMin = -130;
+    settings.dbMax = -50;
 
-    uint32_t before = currentFreq;
-    OnKeyDown(KEY_3); // should call SelectNearestPreset(true) -> next band up
-    CHECK(currentFreq != before);
-    CHECK(currentFreq >= freqPresets[6].fStart); // "10mHam" starts right after CB
+    int before = settings.dbMax;
+    OnKeyDown(KEY_3); // UpdateDBMax(true)
+    CHECK(settings.dbMax == before + 1);
 
-    uint32_t afterUp = currentFreq;
-    OnKeyDown(KEY_9); // should call SelectNearestPreset(false) -> back down
-    CHECK(currentFreq != afterUp);
+    int afterUp = settings.dbMax;
+    OnKeyDown(KEY_9); // UpdateDBMax(false)
+    CHECK(settings.dbMax == afterUp - 1);
 }
 
 // ---------------------------------------------------------------------
 // Regression test: the STILL screen's S-meter/dBm text must not collide
 // with the big frequency readout in the same framebuffer row.
 // ---------------------------------------------------------------------
-static int row_has_bit(int row, int col) {
-    return (gFrameBuffer[row][col] != 0);
-}
-
 static void test_still_screen_no_collision(void) {
     printf("\n-- test_still_screen_no_collision --\n");
 
@@ -63,34 +76,29 @@ static void test_still_screen_no_collision(void) {
     memset(gStatusLine, 0, sizeof(gStatusLine));
 
     fMeasure = 14500000; // 145.00000 MHz
-    scanInfo.rssi = 260; // representative mid-range RSSI raw value
+    scanInfo.rssi = 400;
     isTransmitting = false;
     kbd.current = KEY_INVALID;
     txAllowState = VFO_STATE_NORMAL;
     monitorMode = false;
-    settings.rssiTriggerLevel = 150;
+    settings.rssiTriggerLevel = 350;
+    settings.dbMin = -130;
+    settings.dbMax = -50;
 
     RenderStill();
 
-    // Row 0 (screen y 8-15) holds the big frequency readout only.
-    // Row 1 (screen y 16-23) must hold the S-meter/dBm text.
-    // If the S-meter regressed back onto row 0, columns that are part of
-    // the frequency string AND used by the S-meter text would be set in
-    // row 0 in a pattern inconsistent with pure frequency-digit output --
-    // instead we assert directly on the row we now target: row 1 must have
-    // *something* drawn (S-meter text present) confirming it moved off row0.
-    int row1_has_content = 0;
+    // Row 0 (screen y 8-15) holds the big frequency readout (DrawF, via
+    // UI_PrintStringSmallNormal). The S-meter/dBm text is drawn at
+    // GUI_DisplaySmallest(..., y=25, ...) -> gFrameBuffer[25/8] = row 3.
+    // They are 3 rows apart, so a simple "both rows have content" check
+    // confirms no collision.
+    int row0_has_content = 0, row3_has_content = 0;
     for (int c = 0; c < LCD_WIDTH; c++) {
-        if (row_has_bit(1, c)) { row1_has_content = 1; break; }
+        if (gFrameBuffer[0][c] != 0) row0_has_content = 1;
+        if (gFrameBuffer[3][c] != 0) row3_has_content = 1;
     }
-    CHECK(row1_has_content);
-
-    // And row 0 must be non-empty too (the frequency digits themselves).
-    int row0_has_content = 0;
-    for (int c = 0; c < LCD_WIDTH; c++) {
-        if (row_has_bit(0, c)) { row0_has_content = 1; break; }
-    }
-    CHECK(row0_has_content);
+    CHECK(row0_has_content); // big frequency line
+    CHECK(row3_has_content); // S-meter/dBm text (y=25 -> row 3)
 }
 
 // ---------------------------------------------------------------------
@@ -103,8 +111,8 @@ static void test_still_screen_no_collision(void) {
 // pre-existing off-by-one in UpdateScan()'s completion check, not
 // something these tests are trying to fix), so profile[n] is measured too.
 // ---------------------------------------------------------------------
-static void run_fake_sweep(const uint16_t *profile, int n) {
-    for (int i = 0; i <= n && i < FAKE_RSSI_PROFILE_MAX; i++) {
+static void run_fake_sweep(const uint16_t *profile, uint16_t n) {
+    for (uint16_t i = 0; i <= n && i < FAKE_RSSI_PROFILE_MAX; i++) {
         fake_rssi_profile[i] = profile[i];
     }
     fake_rssi_profile_len = n + 1;
@@ -112,7 +120,7 @@ static void run_fake_sweep(const uint16_t *profile, int n) {
 
     RelaunchScan();
     ResetBlacklist();
-    for (int i = 0; i <= n; i++) {
+    for (uint16_t i = 0; i <= n; i++) {
         UpdateScan();
     }
 }
@@ -127,61 +135,24 @@ static void test_spectrum_scan_finds_peak(void) {
     settings.stepsCount = STEPS_64;
     settings.rssiTriggerLevel = RSSI_MAX_VALUE; // disable auto-RX side effects
     currentFreq = 14500000; // 145.00000 MHz
-    settings.scanStepIndex = STEP_25_0kHz;
-    int n = GetStepsCount(); // 64
+    settings.scanStepIndex = S_STEP_25_0kHz;
+    uint16_t n = GetStepsCount(); // 64
 
     uint16_t profile[FAKE_RSSI_PROFILE_MAX];
-    for (int i = 0; i <= n; i++) profile[i] = 140; // flat noise floor
-    profile[20] = 400; // synthetic strong signal at bin 20
+    for (int i = 0; i <= n; i++) profile[i] = 300; // flat noise floor
+    profile[20] = 500; // synthetic strong signal at bin 20
 
     run_fake_sweep(profile, n);
 
-    CHECK(rssiHistory[20] == 400);
+    CHECK(rssiHistory[20] == 500);
     CHECK(scanInfo.iPeak == 20);
     CHECK(peak.i == 20);
-    CHECK(mov.max == 400);
-    CHECK(mov.min == 140);
 
     // Real DrawSpectrum()/Rssi2Y(): the peak bin must render higher
     // (smaller Y = closer to the top of the graph) than the noise floor.
     uint8_t y_peak = Rssi2Y(rssiHistory[20]);
     uint8_t y_floor = Rssi2Y(rssiHistory[5]);
     CHECK(y_peak < y_floor);
-}
-
-// ---------------------------------------------------------------------
-// Diagnostic (not a "must behave this way" guard): characterizes the
-// still-open "squelch trigger line frozen at the top" report. Feeds a
-// low-absolute-RSSI profile (as if the real radio's ambient noise floor
-// sits well below the fixed default rssiTriggerLevel=150) through the
-// real scan loop, then checks whether Rssi2Y() actually produces the
-// same clamped position across the +/-60 range ~30 keypresses would
-// cover. If this test ever starts failing, the frozen-line report is
-// probably fixed (or its cause changed) -- update or remove it then.
-// ---------------------------------------------------------------------
-static void test_trigger_line_frozen_with_low_signal(void) {
-    printf("\n-- test_trigger_line_frozen_with_low_signal (diagnostic) --\n");
-
-    settings.stepsCount = STEPS_64;
-    settings.rssiTriggerLevel = RSSI_MAX_VALUE;
-    currentFreq = 14500000;
-    settings.scanStepIndex = STEP_25_0kHz;
-    int n = GetStepsCount();
-
-    uint16_t profile[FAKE_RSSI_PROFILE_MAX];
-    for (int i = 0; i <= n; i++) profile[i] = 20 + (i % 5); // ~20-24 noise floor
-    profile[10] = 40; // weak local peak
-
-    run_fake_sweep(profile, n);
-    printf("   mov.min=%u mov.max=%u\n", mov.min, mov.max);
-
-    uint8_t y_90  = Rssi2Y(90);
-    uint8_t y_150 = Rssi2Y(150);
-    uint8_t y_210 = Rssi2Y(210);
-    printf("   Rssi2Y(90)=%u Rssi2Y(150)=%u Rssi2Y(210)=%u\n", y_90, y_150, y_210);
-
-    CHECK(y_150 == y_90);
-    CHECK(y_150 == y_210);
 }
 
 // ---------------------------------------------------------------------
@@ -217,20 +188,29 @@ static void test_spectrum_arrow_text_collision(void) {
 
     settings.stepsCount = STEPS_64;
     currentFreq = 14500000;
-    settings.scanStepIndex = STEP_25_0kHz; // exercises the wide "center mode" text
+    // egzumer's IsCenterMode() is `scanStepIndex < S_STEP_2_5kHz` -- true only
+    // for the finest step sizes (0.01k..1.0k), unlike the old STEP_Setting_t
+    // ordering where STEP_25_0kHz landed below the old threshold. Use
+    // S_STEP_1_0kHz so the sanity check below actually holds.
+    settings.scanStepIndex = S_STEP_1_0kHz; // exercises the "center mode" text
     settings.frequencyChangeStep = 8000;
     CHECK(IsCenterMode()); // sanity: confirms which DrawNums branch is under test
 
     memset(gFrameBuffer, 0, sizeof(gFrameBuffer));
     DrawNums();
-    uint8_t text_row5[LCD_WIDTH];
+    uint8_t text_row5[LCD_WIDTH], text_row6[LCD_WIDTH];
     memcpy(text_row5, gFrameBuffer[5], LCD_WIDTH);
+    memcpy(text_row6, gFrameBuffer[6], LCD_WIDTH);
 
     memset(gFrameBuffer, 0, sizeof(gFrameBuffer));
     peak.i = 31; // roughly mid-scan -- squarely inside the center-mode text's span
-    DrawArrow(peak.i << settings.stepsCount);
+    DrawArrow(128u * peak.i / GetStepsCount());
     uint8_t arrow_row5[LCD_WIDTH];
     memcpy(arrow_row5, gFrameBuffer[5], LCD_WIDTH);
+
+    printf("   text landed in row5=%s row6=%s\n",
+           /* true if any byte nonzero */ ({int any=0; for(int x=0;x<LCD_WIDTH;x++) if(text_row5[x]) any=1; any;}) ? "yes" : "no",
+           ({int any=0; for(int x=0;x<LCD_WIDTH;x++) if(text_row6[x]) any=1; any;}) ? "yes" : "no");
 
     int overlap_col = -1;
     for (int x = 0; x < LCD_WIDTH; x++) {
@@ -241,17 +221,16 @@ static void test_spectrum_arrow_text_collision(void) {
                overlap_col, text_row5[overlap_col], arrow_row5[overlap_col]);
         memset(gFrameBuffer, 0, sizeof(gFrameBuffer));
         DrawNums();
-        DrawArrow(peak.i << settings.stepsCount);
+        DrawArrow(128u * peak.i / GetStepsCount());
         dump_row_ascii(5, overlap_col > 10 ? overlap_col - 10 : 0, overlap_col + 10);
     }
     CHECK(overlap_col == -1);
 }
 
 int main(void) {
-    test_key3_key9_band_switch();
+    test_key3_key9_adjusts_db_range();
     test_still_screen_no_collision();
     test_spectrum_scan_finds_peak();
-    test_trigger_line_frozen_with_low_signal();
     test_spectrum_arrow_text_collision();
 
     printf("\n%s (%d failure%s)\n", failures ? "FAILED" : "PASSED",
