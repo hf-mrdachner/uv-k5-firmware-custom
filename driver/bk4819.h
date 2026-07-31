@@ -71,7 +71,6 @@ uint16_t BK4819_ReadRegister(BK4819_REGISTER_t Register);
 void     BK4819_WriteRegister(BK4819_REGISTER_t Register, uint16_t Data);
 void     BK4819_SetRegValue(RegisterSpec s, uint16_t v);
 uint16_t BK4819_GetRegValue(RegisterSpec s);
-void     BK4819_TuneTo(uint32_t f, bool precise);
 void     BK4819_ToggleAFDAC(bool on);
 void     BK4819_ToggleAFBit(bool on);
 void     BK4819_WriteU8(uint8_t Data);

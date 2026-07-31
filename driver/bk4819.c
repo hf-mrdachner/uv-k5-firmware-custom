@@ -822,25 +822,6 @@ uint16_t BK4819_GetRegValue(RegisterSpec s) {
   return (BK4819_ReadRegister(s.num) >> s.offset) & s.mask;
 }
 
-void BK4819_TuneTo(uint32_t f, bool precise) {
-  BK4819_PickRXFilterPathBasedOnFrequency(f);
-  BK4819_SetFrequency(f);
-
-  // Writing the new frequency to REG_38/REG_39 alone does not make the PLL
-  // actually relock -- toggling the VCO calibration bit in REG_30 (write a
-  // modified value, then write the original back) strobes the chip into
-  // recalibrating for the new frequency. Without this, RX stays tuned to
-  // whatever frequency it last locked onto, so every RSSI reading during a
-  // fast scan sweep comes back identical regardless of scanInfo.f.
-  uint16_t reg = BK4819_ReadRegister(BK4819_REG_30);
-  if (precise) {
-    BK4819_WriteRegister(BK4819_REG_30, 0x0200);
-  } else {
-    BK4819_WriteRegister(BK4819_REG_30, reg & ~BK4819_REG_30_ENABLE_VCO_CALIB);
-  }
-  BK4819_WriteRegister(BK4819_REG_30, reg);
-}
-
 void BK4819_ToggleAFDAC(bool on) {
   uint16_t reg = BK4819_ReadRegister(BK4819_REG_30);
   if (on)
