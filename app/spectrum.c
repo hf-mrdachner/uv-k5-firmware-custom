@@ -1438,7 +1438,6 @@ void APP_RunSpectrum() {
   {
     currentFreq = initialFreq = gTxVfo->pRX->Frequency -
                                 ((GetStepsCount() / 2) * GetScanStep());
-    AutomaticPresetChoose(currentFreq);
   }
 
   BackupRegisters();
@@ -1453,6 +1452,11 @@ void APP_RunSpectrum() {
   RADIO_SetModulation(settings.modulationType = gTxVfo->Modulation);
 
   BK4819_SetFilterBandwidth(settings.listenBw = BK4819_FILTER_BW_WIDE, false);
+
+#ifdef ENABLE_SCAN_RANGES
+  if (!gScanRangeStart)
+#endif
+    AutomaticPresetChoose(currentFreq);
 
   RelaunchScan();
 
