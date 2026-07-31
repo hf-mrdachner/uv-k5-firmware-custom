@@ -132,7 +132,6 @@ OBJS += app/generic.o
 OBJS += app/main.o
 OBJS += app/menu.o
 ifeq ($(ENABLE_SPECTRUM), 1)
-OBJS += app/finput.o
 OBJS += app/spectrum.o
 endif
 OBJS += app/scanner.o
@@ -151,7 +150,6 @@ OBJS += frequencies.o
 OBJS += functions.o
 OBJS += helper/battery.o
 OBJS += helper/boot.o
-OBJS += helper/measurements.o
 OBJS += misc.o
 OBJS += radio.o
 OBJS += scheduler.o
