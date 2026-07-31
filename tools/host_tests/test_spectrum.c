@@ -39,6 +39,7 @@ static volatile GPIO_Bank_t fake_gpio_banks[3];
 // production header since real firmware doesn't have a "the" VFO stub --
 // only this test needs direct access to it, to control gTxVfo->pRX->Frequency.
 extern VFO_Info_t gVfoInfoStub;
+extern KEY_Code_t fake_next_key;
 
 static int failures = 0;
 
@@ -117,11 +118,25 @@ static void test_still_screen_no_collision(void) {
 // pre-existing off-by-one in UpdateScan()'s completion check, not
 // something these tests are trying to fix), so profile[n] is measured too.
 // ---------------------------------------------------------------------
+// NOTE (found while doing Task 9's ENABLE_SCAN_RANGES build-flag alignment,
+// confirmed via temporary diagnostics, not app/spectrum.c changes): with
+// ENABLE_SCAN_RANGES compiled in -- as it now is, to match the real
+// firmware's default, see build.sh -- IsBlacklisted() has a real,
+// pre-existing bug in app/spectrum.c: a freshly-reset blacklistFreqs[] is
+// all zero, and IsBlacklisted(0) treats a zero *entry* (an empty slot) as
+// equal to frequency-bin *index* 0, so it spuriously reports bin 0 as
+// blacklisted. Scan() therefore silently never measures bin 0 of any fresh
+// sweep (confirmed: IsBlacklisted(0)==true, fake_rssi_profile_pos stays at
+// 0 through i=0, so bin 1 consumes profile position 0, not bin 0). This is
+// a genuine firmware bug, unrelated to the preset-selection guard this
+// project has been chasing, and out of scope to fix here -- see
+// task-9-report.md. Bin 0's own entry in `profile` is therefore unused;
+// bins 1..n each consume profile[i], same as before.
 static void run_fake_sweep(const uint16_t *profile, uint16_t n) {
-    for (uint16_t i = 0; i <= n && i < FAKE_RSSI_PROFILE_MAX; i++) {
-        fake_rssi_profile[i] = profile[i];
+    for (uint16_t i = 0; i < n && i < FAKE_RSSI_PROFILE_MAX; i++) {
+        fake_rssi_profile[i] = profile[i + 1];
     }
-    fake_rssi_profile_len = n + 1;
+    fake_rssi_profile_len = n;
     fake_rssi_profile_pos = 0;
 
     RelaunchScan();
@@ -308,6 +323,90 @@ static void test_get_preset_match_frequency_returns_raw_vfo_frequency(void) {
     CHECK(currentFreq == 14400000); // jumped to 2mHam's fStart
 }
 
+// ---------------------------------------------------------------------
+// End-to-end regression test: the REAL APP_RunSpectrum() -- not
+// AutomaticPresetChoose() called directly -- must apply a matching
+// preset on entry. Tasks 5 and 7 were both "verified clean" against
+// AutomaticPresetChoose() in isolation, and still failed on real
+// hardware three times; this closes the gap between "the matching
+// logic is correct" and "the real entry path actually reaches it and
+// nothing overwrites it afterward." Drives the real `while
+// (isInitialized) { Tick(); }` loop with a scripted KEY_EXIT so it
+// runs to completion and returns normally via the real
+// DeInitSpectrum(), the same way it would on hardware.
+// ---------------------------------------------------------------------
+static void test_app_run_spectrum_applies_preset_end_to_end(void) {
+    printf("\n-- test_app_run_spectrum_applies_preset_end_to_end --\n");
+
+    kbd = (KeyboardState){KEY_INVALID, KEY_INVALID, 0};
+    menuState = 0;
+    settings.rssiTriggerLevel = RSSI_MAX_VALUE; // scan always runs to completion
+    gEeprom.TX_VFO = 0;
+
+#ifdef ENABLE_SCAN_RANGES
+    gScanRangeStart = 0;
+    gScanRangeStop = 0;
+#endif
+
+    gVfoInfoStub.freq_config_RX.Frequency = 14450000; // 144.50000 MHz, inside 2mHam
+    gVfoInfoStub.pRX = &gVfoInfoStub.freq_config_RX;
+    gVfoInfoStub.Modulation = MODULATION_USB; // deliberately NOT 2mHam's FM, so a match is visible
+
+    fake_next_key = KEY_EXIT;
+
+    APP_RunSpectrum(); // real entry point, blocks until it exits via KEY_EXIT
+
+    fake_next_key = KEY_INVALID;
+
+    CHECK(currentFreq == 14400000); // 2mHam's fStart
+    CHECK(settings.scanStepIndex == S_STEP_25_0kHz);
+    CHECK(settings.stepsCount == STEPS_128);
+    CHECK(settings.modulationType == MODULATION_FM); // overwritten by ApplyPreset, not left as USB
+    CHECK(settings.listenBw == BK4819_FILTER_BW_WIDE);
+}
+
+#ifdef ENABLE_SCAN_RANGES
+// ---------------------------------------------------------------------
+// Regression test for the ledger's unconfirmed hypothesis: a nonzero
+// gScanRangeStart left over from an earlier toggle_chan_scanlist()
+// press (app/main.c) makes APP_RunSpectrum's `if (!gScanRangeStart)`
+// guard skip AutomaticPresetChoose entirely, even when the VFO
+// frequency sits inside a well-defined preset's range. This does NOT
+// prove gScanRangeStart is actually nonzero on the real device -- only
+// the code's behavior IF it were.
+// ---------------------------------------------------------------------
+static void test_app_run_spectrum_skips_preset_when_scan_range_active(void) {
+    printf("\n-- test_app_run_spectrum_skips_preset_when_scan_range_active --\n");
+
+    kbd = (KeyboardState){KEY_INVALID, KEY_INVALID, 0};
+    menuState = 0;
+    settings.rssiTriggerLevel = RSSI_MAX_VALUE;
+    gEeprom.TX_VFO = 0;
+
+    gScanRangeStart = 14500000; // 145.00000 MHz -- an active scan range
+    gScanRangeStop  = 14550000; // 145.50000 MHz (0.5MHz wide)
+
+    // VFO frequency is still inside 2mHam's range, same as the test above --
+    // if the guard works as coded, this must make NO difference here.
+    gVfoInfoStub.freq_config_RX.Frequency = 14450000;
+    gVfoInfoStub.pRX = &gVfoInfoStub.freq_config_RX;
+    gVfoInfoStub.Modulation = MODULATION_AM; // NOT 2mHam's FM
+    gVfoInfoStub.StepFrequency = 1250; // picks S_STEP_12_5kHz below, NOT 2mHam's S_STEP_25_0kHz
+
+    fake_next_key = KEY_EXIT;
+
+    APP_RunSpectrum();
+
+    fake_next_key = KEY_INVALID;
+    gScanRangeStart = 0;
+    gScanRangeStop = 0;
+
+    CHECK(currentFreq == 14500000); // gScanRangeStart's own value, NOT 2mHam's fStart (14400000)
+    CHECK(settings.scanStepIndex == S_STEP_12_5kHz); // the scan-range path's own step, NOT 2mHam's S_STEP_25_0kHz
+    CHECK(settings.modulationType == MODULATION_AM); // NOT overwritten to 2mHam's FM -- confirms ApplyPreset never ran
+}
+#endif
+
 int main(void) {
     test_key3_key9_adjusts_db_range();
     test_still_screen_no_collision();
@@ -315,6 +414,10 @@ int main(void) {
     test_spectrum_arrow_text_collision();
     test_automatic_preset_choose_matches_near_band_edge();
     test_get_preset_match_frequency_returns_raw_vfo_frequency();
+    test_app_run_spectrum_applies_preset_end_to_end();
+#ifdef ENABLE_SCAN_RANGES
+    test_app_run_spectrum_skips_preset_when_scan_range_active();
+#endif
 
     printf("\n%s (%d failure%s)\n", failures ? "FAILED" : "PASSED",
            failures, failures == 1 ? "" : "s");

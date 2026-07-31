@@ -38,6 +38,11 @@ uint8_t gBatteryDisplayLevel;
 uint16_t gBatteryCalibration[6] = {1, 2, 3, 4, 5, 6};
 uint16_t gBatteryCheckCounter;
 
+#ifdef ENABLE_SCAN_RANGES
+uint32_t gScanRangeStart;
+uint32_t gScanRangeStop;
+#endif
+
 const int8_t dBmCorrTable[7] = {0, 0, 0, 0, 0, 0, 0};
 
 const char gModulationStr[MODULATION_UKNOWN][4] = {"FM", "AM", "USB"};
@@ -88,7 +93,8 @@ void RADIO_SetupAGC(bool listeningAM, bool disable) { (void)listeningAM; (void)d
 void BACKLIGHT_TurnOn(void) {}
 void BACKLIGHT_TurnOff(void) {}
 
-KEY_Code_t KEYBOARD_Poll(void) { return KEY_INVALID; }
+KEY_Code_t fake_next_key = KEY_INVALID;
+KEY_Code_t KEYBOARD_Poll(void) { return fake_next_key; }
 
 void SYSTEM_DelayMs(unsigned int ms) { (void)ms; }
 void SYSTICK_DelayUs(uint32_t us) { (void)us; }

@@ -21,7 +21,7 @@ cd "$(dirname "$0")/../.."   # repo root
 OUT=/tmp/uvk5_host_tests
 mkdir -p "$OUT"
 
-CFLAGS="-I. -DPRINTF_INCLUDE_CONFIG_H -DENABLE_SPECTRUM -Wall -Wextra"
+CFLAGS="-I. -DPRINTF_INCLUDE_CONFIG_H -DENABLE_SPECTRUM -DENABLE_SCAN_RANGES -Wall -Wextra"
 
 gcc $CFLAGS -c font.c -o "$OUT/font.o"
 gcc $CFLAGS -c external/printf/printf.c -o "$OUT/printf.o"
