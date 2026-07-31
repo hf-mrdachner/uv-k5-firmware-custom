@@ -1396,6 +1396,28 @@ static void Tick() {
   }
 }
 
+static void ApplyPreset(FreqPreset p) {
+  currentFreq = p.fStart;
+  settings.scanStepIndex = p.stepSizeIndex;
+  settings.listenBw = p.listenBW;
+  settings.modulationType = p.modulationType;
+  settings.stepsCount = p.stepsCountIndex;
+  RADIO_SetModulation(settings.modulationType);
+  RelaunchScan();
+  ResetBlacklist();
+  redrawScreen = true;
+  settings.frequencyChangeStep = GetBW();
+}
+
+static void AutomaticPresetChoose(uint32_t f) {
+  for (uint8_t i = 0; i < ARRAY_SIZE(freqPresets); ++i) {
+    const FreqPreset *p = &freqPresets[i];
+    if (f >= p->fStart && f <= p->fEnd) {
+      ApplyPreset(*p);
+    }
+  }
+}
+
 void APP_RunSpectrum() {
   // TX here coz it always? set to active VFO
   vfo = gEeprom.TX_VFO;
@@ -1413,8 +1435,11 @@ void APP_RunSpectrum() {
   }
   else
 #endif
+  {
     currentFreq = initialFreq = gTxVfo->pRX->Frequency -
                                 ((GetStepsCount() / 2) * GetScanStep());
+    AutomaticPresetChoose(currentFreq);
+  }
 
   BackupRegisters();
 
