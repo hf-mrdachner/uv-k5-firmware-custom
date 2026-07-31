@@ -1409,6 +1409,8 @@ static void ApplyPreset(FreqPreset p) {
   settings.frequencyChangeStep = GetBW();
 }
 
+static uint32_t GetPresetMatchFrequency(void) { return gTxVfo->pRX->Frequency; }
+
 static void AutomaticPresetChoose(uint32_t f) {
   for (uint8_t i = 0; i < ARRAY_SIZE(freqPresets); ++i) {
     const FreqPreset *p = &freqPresets[i];
@@ -1456,7 +1458,7 @@ void APP_RunSpectrum() {
 #ifdef ENABLE_SCAN_RANGES
   if (!gScanRangeStart)
 #endif
-    AutomaticPresetChoose(gTxVfo->pRX->Frequency);
+    AutomaticPresetChoose(GetPresetMatchFrequency());
 
   RelaunchScan();
 

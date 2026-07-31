@@ -34,6 +34,12 @@ static volatile GPIO_Bank_t fake_gpio_banks[3];
 #include "../../app/spectrum.c"
 #include "fake_signal.h"
 
+// gVfoInfoStub is defined in stubs.c (the real VFO_Info_t storage that
+// gTxVfo/gRxVfo/gCurrentVfo all point at by default). Not declared in any
+// production header since real firmware doesn't have a "the" VFO stub --
+// only this test needs direct access to it, to control gTxVfo->pRX->Frequency.
+extern VFO_Info_t gVfoInfoStub;
+
 static int failures = 0;
 
 #define CHECK(cond) do { \
@@ -268,12 +274,47 @@ static void test_automatic_preset_choose_matches_near_band_edge(void) {
     CHECK(currentFreq == 0); // confirms the centered value indeed falls in the gap
 }
 
+// ---------------------------------------------------------------------
+// Regression test: GetPresetMatchFrequency() -- the exact expression the
+// real APP_RunSpectrum() call site passes into AutomaticPresetChoose() --
+// must return the VFO's raw, un-centered RX frequency (gTxVfo->pRX->Frequency)
+// and nothing else. The previous test above proves the MATCHING LOGIC is
+// correct in isolation, but it hand-computes its "centered" test value
+// independently of the real call site; it would not have caught the actual
+// bug if the call site's expression had been wrong in some other way. This
+// test ties the check directly to the real data source (the gTxVfo VFO
+// stub), closing that gap.
+// ---------------------------------------------------------------------
+static void test_get_preset_match_frequency_returns_raw_vfo_frequency(void) {
+    printf("\n-- test_get_preset_match_frequency_returns_raw_vfo_frequency --\n");
+
+    uint32_t vfo_freq = 14450000; // 144.50000 MHz
+    gVfoInfoStub.freq_config_RX.Frequency = vfo_freq;
+    gVfoInfoStub.pRX = &gVfoInfoStub.freq_config_RX;
+
+    CHECK(GetPresetMatchFrequency() == vfo_freq);
+
+    // And, tying it back to the matching logic: feeding the real call
+    // site's actual data source through the real call site's actual
+    // expression must select 2mHam's preset, not fall in the gap.
+    settings.stepsCount = STEPS_64;
+    settings.scanStepIndex = S_STEP_25_0kHz;
+    settings.modulationType = MODULATION_FM;
+    settings.listenBw = BK4819_FILTER_BW_WIDE;
+    currentFreq = 0; // sentinel
+
+    AutomaticPresetChoose(GetPresetMatchFrequency());
+
+    CHECK(currentFreq == 14400000); // jumped to 2mHam's fStart
+}
+
 int main(void) {
     test_key3_key9_adjusts_db_range();
     test_still_screen_no_collision();
     test_spectrum_scan_finds_peak();
     test_spectrum_arrow_text_collision();
     test_automatic_preset_choose_matches_near_band_edge();
+    test_get_preset_match_frequency_returns_raw_vfo_frequency();
 
     printf("\n%s (%d failure%s)\n", failures ? "FAILED" : "PASSED",
            failures, failures == 1 ? "" : "s");
