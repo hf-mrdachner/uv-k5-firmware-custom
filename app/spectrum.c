@@ -1456,7 +1456,7 @@ void APP_RunSpectrum() {
 #ifdef ENABLE_SCAN_RANGES
   if (!gScanRangeStart)
 #endif
-    AutomaticPresetChoose(currentFreq);
+    AutomaticPresetChoose(gTxVfo->pRX->Frequency);
 
   RelaunchScan();
 

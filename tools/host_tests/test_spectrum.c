@@ -227,11 +227,53 @@ static void test_spectrum_arrow_text_collision(void) {
     CHECK(overlap_col == -1);
 }
 
+// ---------------------------------------------------------------------
+// Regression test: AutomaticPresetChoose() must be called with the VFO's
+// actual tuned frequency, not the already-centered scan-window midpoint
+// (currentFreq minus half the scan window width) computed just above its
+// call site in APP_RunSpectrum. Confirmed on real hardware: band-preset
+// selection silently failed for any frequency in roughly the lower 0.8MHz
+// of a band's range, because the centered test point fell below the
+// band's fStart -- landing in the gap between presets and matching
+// nothing.
+// ---------------------------------------------------------------------
+static void test_automatic_preset_choose_matches_near_band_edge(void) {
+    printf("\n-- test_automatic_preset_choose_matches_near_band_edge --\n");
+
+    // 144.500MHz: inside 2mHam's range (144.400-148.000MHz), but before the
+    // fix, AutomaticPresetChoose was being called with an already-centered
+    // frequency (~0.8MHz below the true VFO frequency with default settings),
+    // which lands BELOW 144.400MHz here -- no preset matched at all.
+    settings.stepsCount = STEPS_64;
+    settings.scanStepIndex = S_STEP_25_0kHz;
+    settings.modulationType = MODULATION_FM;
+    settings.listenBw = BK4819_FILTER_BW_WIDE;
+
+    uint32_t vfo_freq = 14450000; // 144.50000 MHz, in this codebase's 10Hz units
+
+    AutomaticPresetChoose(vfo_freq);
+
+    CHECK(currentFreq == 14400000); // jumped to 2mHam's fStart
+    CHECK(settings.scanStepIndex == S_STEP_25_0kHz);
+    CHECK(settings.stepsCount == STEPS_128);
+    CHECK(settings.modulationType == MODULATION_FM);
+    CHECK(settings.listenBw == BK4819_FILTER_BW_WIDE);
+
+    // The actual bug: calling it with the CENTERED value (what the old,
+    // unfixed call site passed) must NOT match -- this is what "some region
+    // instead of 2mHam" looked like on real hardware.
+    uint32_t centered_test_point = vfo_freq - 80000; // matches the real offset computation
+    currentFreq = 0; // sentinel so we can tell if ApplyPreset ran
+    AutomaticPresetChoose(centered_test_point);
+    CHECK(currentFreq == 0); // confirms the centered value indeed falls in the gap
+}
+
 int main(void) {
     test_key3_key9_adjusts_db_range();
     test_still_screen_no_collision();
     test_spectrum_scan_finds_peak();
     test_spectrum_arrow_text_collision();
+    test_automatic_preset_choose_matches_near_band_edge();
 
     printf("\n%s (%d failure%s)\n", failures ? "FAILED" : "PASSED",
            failures, failures == 1 ? "" : "s");
