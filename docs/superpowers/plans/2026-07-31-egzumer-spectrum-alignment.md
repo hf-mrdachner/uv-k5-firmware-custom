@@ -1253,3 +1253,149 @@ Specifically: does entering the spectrum screen on a frequency inside a known ba
 cd "$(git rev-parse --show-toplevel)"
 rm -f firmware_uvk5_v1 firmware_uvk5_v1.bin firmware_uvk5_v1.packed.bin
 ```
+
+---
+
+### Task 7: Fix preset matching against the wrong (already-centered) frequency
+
+**Context (found during Task 6's hardware verification — band-preset selection still didn't work after Task 5):** `AutomaticPresetChoose(currentFreq)` in `APP_RunSpectrum` tests against `currentFreq`, which by the time it's called has already been shifted by `-(GetStepsCount()/2)*GetScanStep())` (~0.8MHz with default `STEPS_64`/`S_STEP_25_0kHz` settings) to center the initial scan window. The pre-swap code tested against the VFO's raw tuned frequency directly, with no centering offset applied first. Verified with real numbers: for the `2mHam` preset (144.400-148.000MHz), any VFO frequency in roughly 144.400-145.199MHz computes a centered test point below 144.400MHz — landing in the gap between presets, matching nothing, producing exactly the reported symptom ("some region" instead of the named band).
+
+**Files:**
+- Modify: `app/spectrum.c` (one-line fix to `APP_RunSpectrum`'s `AutomaticPresetChoose` call)
+- Modify: `tools/host_tests/test_spectrum.c` (new regression test)
+
+**Interfaces:**
+- Consumes: Task 5 complete.
+- Produces: nothing new; this is a targeted bug fix plus a test.
+
+- [ ] **Step 1: Fix the call site**
+
+Find:
+
+```c
+#ifdef ENABLE_SCAN_RANGES
+  if (!gScanRangeStart)
+#endif
+    AutomaticPresetChoose(currentFreq);
+```
+
+Replace with:
+
+```c
+#ifdef ENABLE_SCAN_RANGES
+  if (!gScanRangeStart)
+#endif
+    AutomaticPresetChoose(gTxVfo->pRX->Frequency);
+```
+
+(Match against the VFO's actual tuned frequency, not the already-centered scan-window midpoint. `ApplyPreset()` overwrites `currentFreq = p.fStart` on a match regardless, so this only changes what frequency is used for the matching test itself, not what happens once a preset is found.)
+
+- [ ] **Step 2: Add a regression test proving this with real numbers**
+
+In `tools/host_tests/test_spectrum.c`, add a new test that calls `AutomaticPresetChoose` directly (it's a `static` function in the `#include`d real `app/spectrum.c`, already callable from the test file the same way other static functions are) with a frequency in the range this bug affected, and confirms it now matches:
+
+```c
+static void test_automatic_preset_choose_matches_near_band_edge(void) {
+    printf("\n-- test_automatic_preset_choose_matches_near_band_edge --\n");
+
+    // 144.500MHz: inside 2mHam's range (144.400-148.000MHz), but before the
+    // fix, AutomaticPresetChoose was being called with an already-centered
+    // frequency (~0.8MHz below the true VFO frequency with default settings),
+    // which lands BELOW 144.400MHz here -- no preset matched at all.
+    settings.stepsCount = STEPS_64;
+    settings.scanStepIndex = S_STEP_25_0kHz;
+    settings.modulationType = MODULATION_FM;
+    settings.listenBw = BK4819_FILTER_BW_WIDE;
+
+    uint32_t vfo_freq = 14450000; // 144.50000 MHz, in this codebase's 10Hz units
+
+    AutomaticPresetChoose(vfo_freq);
+
+    CHECK(currentFreq == 14400000); // jumped to 2mHam's fStart
+    CHECK(settings.scanStepIndex == S_STEP_25_0kHz);
+    CHECK(settings.stepsCount == STEPS_128);
+    CHECK(settings.modulationType == MODULATION_FM);
+    CHECK(settings.listenBw == BK4819_FILTER_BW_WIDE);
+
+    // The actual bug: calling it with the CENTERED value (what the old,
+    // unfixed call site passed) must NOT match -- this is what "some region
+    // instead of 2mHam" looked like on real hardware.
+    uint32_t centered_test_point = vfo_freq - 80000; // matches the real offset computation
+    currentFreq = 0; // sentinel so we can tell if ApplyPreset ran
+    AutomaticPresetChoose(centered_test_point);
+    CHECK(currentFreq == 0); // confirms the centered value indeed falls in the gap
+}
+```
+
+Add the call to `main()` alongside the other tests.
+
+- [ ] **Step 3: Build and verify**
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd)":/app uvk5-buildcheck /bin/bash -c "cd /app && make clean && make -j4"
+MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd)":/app uvk5-hosttest /bin/bash /app/tools/host_tests/build.sh
+```
+
+Expected: ARM build clean, under 61440 bytes. Host tests `PASSED (0 failures)` including the new test.
+
+- [ ] **Step 4: Verify the test actually catches the regression**
+
+Temporarily revert Step 1's fix in a scratch copy (or just change `gTxVfo->pRX->Frequency` back to `currentFreq` in the call site), re-run the host test suite, confirm the new test fails, then restore the fix. This is the same verification discipline used for every other test added in this plan — don't skip it just because the bug is now well-understood.
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add app/spectrum.c tools/host_tests/test_spectrum.c
+git commit -m "$(cat <<'EOF'
+Fix preset matching to use the VFO's actual frequency, not the centered scan window
+
+AutomaticPresetChoose(currentFreq) was matching against an already-offset
+value (currentFreq minus half the scan window width, ~0.8MHz with default
+settings) instead of the VFO's actual tuned frequency. Any frequency in
+roughly the lower 0.8MHz of a band's range computed a test point below
+the band's start, landing in the gap between presets and matching
+nothing -- confirmed on real hardware (reported as "some region" instead
+of the expected band) and reproduced exactly with real numbers in the new
+host test.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+EOF
+)"
+```
+
+---
+
+### Task 8: Re-flash and confirm the fix on real hardware
+
+**Files:** none (verification only)
+
+**Interfaces:**
+- Consumes: Task 7 complete.
+
+- [ ] **Step 1: Build the packed firmware**
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+MSYS_NO_PATHCONV=1 docker run --rm -v "$(pwd)":/app uvk5-buildcheck /bin/bash -c "cd /app && make clean && make -j4"
+```
+
+- [ ] **Step 2: Ask the user to put the radio in bootloader mode, then flash**
+
+Check `python tools/k5flash.py --list-ports` for the current port first — it has changed between sessions in this project before.
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+python tools/k5flash.py -p <PORT> firmware_uvk5_v1.packed.bin
+```
+
+- [ ] **Step 3: Ask the user to verify on the real device**
+
+Specifically: tune the active VFO/channel to a frequency in the lower portion of a known band (e.g. 144.4-145.2MHz for 2m) — the case that was broken before this fix — and confirm entering the spectrum screen now correctly snaps to that band's curated window. Also spot-check a frequency well inside a band's middle (which likely already appeared to work before, since the bug was specifically edge-dependent) to make sure nothing regressed there.
+
+- [ ] **Step 4: Clean up build artifacts**
+
+```bash
+cd "$(git rev-parse --show-toplevel)"
+rm -f firmware_uvk5_v1 firmware_uvk5_v1.bin firmware_uvk5_v1.packed.bin
+```
