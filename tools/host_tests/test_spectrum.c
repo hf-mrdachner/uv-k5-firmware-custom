@@ -184,11 +184,75 @@ static void test_trigger_line_frozen_with_low_signal(void) {
     CHECK(y_150 == y_210);
 }
 
+// ---------------------------------------------------------------------
+// Reusable fixture: dump a framebuffer row as ASCII, one line per bit
+// (screen y = 8 + row*8 + bit), for visually inspecting collisions between
+// draw calls that share a row. Not a test by itself -- use it from a
+// diagnostic test, print the output, then decide what to assert.
+// ---------------------------------------------------------------------
+static void dump_row_ascii(int row, int x0, int x1) {
+    for (int bit = 0; bit < 8; bit++) {
+        printf("  y=%2d ", 8 + row * 8 + bit);
+        for (int x = x0; x < x1; x++) {
+            putchar((gFrameBuffer[row][x] & (1 << bit)) ? '#' : '.');
+        }
+        putchar('\n');
+    }
+}
+
+// ---------------------------------------------------------------------
+// Regression test: the SPECTRUM screen's frequency-range labels (DrawNums,
+// row 5, y49-53) and the peak-position arrow (DrawArrow, row 5, bits3-6 /
+// y51-54) both live in row 5 and can visually merge whenever the peak's x
+// position falls within the text's column range -- reported as the
+// frequency text appearing to collide with "the spectrum" (inherited from
+// the egzumer/fagci spectrum merge, not introduced by later changes here).
+//
+// Isolates each element in its own clean buffer (rather than parsing a
+// combined render) so the check is exactly "do these two elements' pixels
+// ever share a column+bit", independent of exact glyph shapes.
+// ---------------------------------------------------------------------
+static void test_spectrum_arrow_text_collision(void) {
+    printf("\n-- test_spectrum_arrow_text_collision --\n");
+
+    settings.stepsCount = STEPS_64;
+    currentFreq = 14500000;
+    settings.scanStepIndex = STEP_25_0kHz; // exercises the wide "center mode" text
+    settings.frequencyChangeStep = 8000;
+    CHECK(IsCenterMode()); // sanity: confirms which DrawNums branch is under test
+
+    memset(gFrameBuffer, 0, sizeof(gFrameBuffer));
+    DrawNums();
+    uint8_t text_row5[LCD_WIDTH];
+    memcpy(text_row5, gFrameBuffer[5], LCD_WIDTH);
+
+    memset(gFrameBuffer, 0, sizeof(gFrameBuffer));
+    peak.i = 31; // roughly mid-scan -- squarely inside the center-mode text's span
+    DrawArrow(peak.i << settings.stepsCount);
+    uint8_t arrow_row5[LCD_WIDTH];
+    memcpy(arrow_row5, gFrameBuffer[5], LCD_WIDTH);
+
+    int overlap_col = -1;
+    for (int x = 0; x < LCD_WIDTH; x++) {
+        if (text_row5[x] & arrow_row5[x]) { overlap_col = x; break; }
+    }
+    if (overlap_col >= 0) {
+        printf("   collision at column %d (text=0x%02x arrow=0x%02x)\n",
+               overlap_col, text_row5[overlap_col], arrow_row5[overlap_col]);
+        memset(gFrameBuffer, 0, sizeof(gFrameBuffer));
+        DrawNums();
+        DrawArrow(peak.i << settings.stepsCount);
+        dump_row_ascii(5, overlap_col > 10 ? overlap_col - 10 : 0, overlap_col + 10);
+    }
+    CHECK(overlap_col == -1);
+}
+
 int main(void) {
     test_key3_key9_band_switch();
     test_still_screen_no_collision();
     test_spectrum_scan_finds_peak();
     test_trigger_line_frozen_with_low_signal();
+    test_spectrum_arrow_text_collision();
 
     printf("\n%s (%d failure%s)\n", failures ? "FAILED" : "PASSED",
            failures, failures == 1 ? "" : "s");
