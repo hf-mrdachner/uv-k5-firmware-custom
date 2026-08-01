@@ -20,8 +20,10 @@ extern uint16_t fake_rssi_profile[FAKE_RSSI_PROFILE_MAX];
 extern int fake_rssi_profile_len;
 extern int fake_rssi_profile_pos;
 
-// Set by the BK4819_SetAGC() stub to whatever it was last called with, so
-// tests can confirm spectrum code actually froze/restored gain around a scan.
+// Set by the BK4819_SetAGC() stub to whatever it was last called with.
+// Currently unread by any test in this directory -- kept as a hook for a
+// future test that wants to confirm spectrum code actually froze/restored
+// gain around a scan, not as evidence such a test already exists.
 extern bool fake_agc_enabled;
 
 #endif

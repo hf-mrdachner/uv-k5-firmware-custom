@@ -261,6 +261,10 @@ CFLAGS += -Wextra
 CFLAGS += -DPRINTF_INCLUDE_CONFIG_H
 CFLAGS += -DAUTHOR_STRING=\"$(AUTHOR_STRING)\" -DVERSION_STRING=\"$(VERSION_STRING)\"
 
+# Keep in sync with tools/host_tests/build.sh's CFLAGS -- see that file's own
+# comment for why (host tests must define the same spectrum-related -D flags
+# as the real build, or they silently test a different code path than what
+# actually ships).
 ifeq ($(ENABLE_SPECTRUM),1)
 CFLAGS += -DENABLE_SPECTRUM
 endif
@@ -333,6 +337,8 @@ endif
 ifeq ($(ENABLE_NO_CODE_SCAN_TIMEOUT),1)
 	CFLAGS  += -DENABLE_NO_CODE_SCAN_TIMEOUT
 endif
+# Keep in sync with tools/host_tests/build.sh's CFLAGS -- see that file's own
+# comment for why.
 ifeq ($(ENABLE_AM_FIX),1)
 	CFLAGS  += -DENABLE_AM_FIX
 endif

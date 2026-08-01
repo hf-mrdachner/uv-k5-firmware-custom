@@ -15,6 +15,8 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #include "../../radio.h"
 #include "../../settings.h"
@@ -22,7 +24,13 @@
 #include "../../driver/bk4819.h"
 #include "../../driver/keyboard.h"
 #include "../../driver/backlight.h"
+#include "../../driver/st7565.h"
+#include "../../driver/system.h"
+#include "../../driver/systick.h"
 #include "../../ui/battery.h"
+#include "../../board.h"
+#include "../../helper/battery.h"
+#include "../../am_fix.h"
 #include "fake_signal.h"
 
 // ---- Globals the real .c files would define ----
@@ -94,7 +102,25 @@ void BACKLIGHT_TurnOn(void) {}
 void BACKLIGHT_TurnOff(void) {}
 
 KEY_Code_t fake_next_key = KEY_INVALID;
-KEY_Code_t KEYBOARD_Poll(void) { return fake_next_key; }
+KEY_Code_t KEYBOARD_Poll(void) {
+    // Safety cap: a scripted key that never causes the caller to exit its
+    // loop would otherwise spin here forever and hang the test run (and CI)
+    // instead of failing fast. See .github/workflows/main.yml's host-tests
+    // job timeout for the other half of this defense.
+    static unsigned long poll_count = 0;
+    if (++poll_count > 100000) {
+        fprintf(stderr, "KEYBOARD_Poll: exceeded 100000 calls -- a test's "
+                         "scripted key is not causing its loop to exit; "
+                         "aborting instead of hanging.\n");
+        abort();
+    }
+    return fake_next_key;
+}
+
+#ifdef ENABLE_AM_FIX
+void AM_fix_10ms(const unsigned vfo) { (void)vfo; }
+int8_t AM_fix_get_gain_diff(void) { return 0; }
+#endif
 
 void SYSTEM_DelayMs(unsigned int ms) { (void)ms; }
 void SYSTICK_DelayUs(uint32_t us) { (void)us; }

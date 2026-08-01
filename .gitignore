@@ -10,4 +10,6 @@ compile_commands.json
 /docs
 k5_eeprom.raw
 *~
-__pycache__/.worktrees/
+__pycache__/
+.worktrees/
+

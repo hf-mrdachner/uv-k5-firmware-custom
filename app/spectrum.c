@@ -350,7 +350,7 @@ static void DeInitSpectrum() {
   isInitialized = false;
 }
 
-uint8_t GetBWRegValueForScan() {
+uint16_t GetBWRegValueForScan() {
   return scanStepBWRegValues[settings.scanStepIndex];
 }
 
@@ -379,8 +379,6 @@ static void ToggleAudio(bool on) {
     AUDIO_AudioPathOff();
   }
 }
-
-static void ToggleTX(bool);
 
 static void ToggleRX(bool on) {
   isListening = on;
@@ -908,10 +906,16 @@ static void SelectNearestPreset(bool inc);
 static void OnKeyDown(uint8_t key) {
   switch (key) {
   case KEY_3:
-    SelectNearestPreset(true);
+#ifdef ENABLE_SCAN_RANGES
+    if(!gScanRangeStart)
+#endif
+      SelectNearestPreset(true);
     break;
   case KEY_9:
-    SelectNearestPreset(false);
+#ifdef ENABLE_SCAN_RANGES
+    if(!gScanRangeStart)
+#endif
+      SelectNearestPreset(false);
     break;
   case KEY_1:
     UpdateScanStep(true);
@@ -1241,7 +1245,14 @@ bool HandleUserInput() {
 }
 
 static void Scan() {
-  if (rssiHistory[scanInfo.i] != RSSI_MAX_VALUE
+  // Bounds-check scanInfo.i before touching rssiHistory[]: with an active
+  // scan range, GetStepsCount() can return an unbounded measurementsCount
+  // (see the KEY_3/KEY_9 guard above), so scanInfo.i can run past the
+  // 128-entry rssiHistory[] array. Skip the measurement entirely rather
+  // than reading/writing out of bounds (confirmed via ASan: this used to
+  // be a real global-buffer-overflow, both on the read here and on the
+  // write inside Measure() -> SetRssiHistory()).
+  if (scanInfo.i < ARRAY_SIZE(rssiHistory) && rssiHistory[scanInfo.i] != RSSI_MAX_VALUE
 #ifdef ENABLE_SCAN_RANGES
   && !IsBlacklisted(scanInfo.i)
 #endif
@@ -1399,8 +1410,8 @@ static void ApplyPreset(FreqPreset p) {
 
 // Restores the pre-swap fagci-based SelectNearestPreset() (git show
 // 64f7cc8^:app/spectrum.c): finds the next preset above (inc=true) or
-// below (inc=false) the current frequency and applies it, wrapping
-// around to the last/first preset respectively when there is none.
+// below (inc=false) the current frequency and applies it, clamping
+// to the last/first preset respectively when there is none.
 static void SelectNearestPreset(bool inc) {
   const FreqPreset *p = NULL;
   const uint8_t SZ = ARRAY_SIZE(freqPresets);
@@ -1435,6 +1446,7 @@ static void AutomaticPresetChoose(uint32_t f) {
     const FreqPreset *p = &freqPresets[i];
     if (f >= p->fStart && f <= p->fEnd) {
       ApplyPreset(*p);
+      break;
     }
   }
 }
@@ -1456,10 +1468,8 @@ void APP_RunSpectrum() {
   }
   else
 #endif
-  {
     currentFreq = initialFreq = gTxVfo->pRX->Frequency -
                                 ((GetStepsCount() / 2) * GetScanStep());
-  }
 
   BackupRegisters();
 
