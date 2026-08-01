@@ -105,14 +105,12 @@ when upstream's own CI is green. When this happens:
 ### Key Files
 | File | Purpose |
 |------|---------|
-| `app/spectrum.c` / `app/spectrum.h` | Spectrum analyzer app (from the fagci fork) |
+| `app/spectrum.c` / `app/spectrum.h` | Spectrum analyzer app — egzumer's implementation (swapped in from the fagci-derived original, commit `64f7cc8`), with this repo's own TX-from-STILL-screen capability preserved via a local patch on top |
 | `app/ardf.c` / `app/ardf.h`, `ui/ardf.c` / `ui/ardf.h` | ARDF fox-hunting mode (from upstream `reald`) |
 | `driver/bk4819.h` / `driver/bk4819.c` | BK4819 RF chip driver (read/write registers, tune, AGC, AF) |
 | `driver/bk4819-regs.h` | Register addresses, `RegisterSpec` struct, named bit-field constants |
 | `radio.h` / `radio.c` | Higher-level radio control (modulation, VFO, TX/RX setup) |
 | `frequencies.h` / `frequencies.c` | Band tables, `STEP_Setting_t` enum, `gStepFrequencyTable[]` |
-| `helper/measurements.h/.c` | Signal helpers: `Rssi2PX`, `Rssi2DBm`, `DBm2S`, `Clamp`, `ConvertDomain`, `Mid` |
-| `app/finput.h/.c` | Frequency input widget (`freqInputString`, `freqInputIndex`, `tempFreq`, `UpdateFreqInput`, `FreqInput`) |
 | `ui/helper.h/.c` | Display primitives: `UI_DrawPixelBuffer`, `UI_DrawLineBuffer`, `UI_PrintStringSmallNormal` (4-arg), `UI_PrintStringSmall` (6-arg) |
 | `font.h` / `font.c` | Fonts: `gFontBig`, `gFontSmall`, `gFontSmallBold`, `gFont3x5[96][3]` (3×5 pixel, the "smallest") |
 | `driver/st7565.h/.c` | LCD driver; defines `gStatusLine[128]` and `gFrameBuffer[7][128]` |

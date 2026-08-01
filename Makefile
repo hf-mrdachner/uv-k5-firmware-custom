@@ -36,6 +36,7 @@ ENABLE_RSSI_BAR               ?= 1
 ENABLE_AUDIO_BAR              ?= 0
 ENABLE_COPY_CHAN_TO_VFO       ?= 1
 ENABLE_SPECTRUM               ?= 1
+ENABLE_SPECTRUM_AUTOMATIC_SQUELCH ?= 1
 ENABLE_REDUCE_LOW_MID_TX_POWER?= 0
 ENABLE_BYP_RAW_DEMODULATORS   ?= 1
 ENABLE_BLMIN_TMP_OFF          ?= 0
@@ -131,7 +132,6 @@ OBJS += app/generic.o
 OBJS += app/main.o
 OBJS += app/menu.o
 ifeq ($(ENABLE_SPECTRUM), 1)
-OBJS += app/finput.o
 OBJS += app/spectrum.o
 endif
 OBJS += app/scanner.o
@@ -150,7 +150,6 @@ OBJS += frequencies.o
 OBJS += functions.o
 OBJS += helper/battery.o
 OBJS += helper/boot.o
-OBJS += helper/measurements.o
 OBJS += misc.o
 OBJS += radio.o
 OBJS += scheduler.o
@@ -262,8 +261,15 @@ CFLAGS += -Wextra
 CFLAGS += -DPRINTF_INCLUDE_CONFIG_H
 CFLAGS += -DAUTHOR_STRING=\"$(AUTHOR_STRING)\" -DVERSION_STRING=\"$(VERSION_STRING)\"
 
+# Keep in sync with tools/host_tests/build.sh's CFLAGS -- see that file's own
+# comment for why (host tests must define the same spectrum-related -D flags
+# as the real build, or they silently test a different code path than what
+# actually ships).
 ifeq ($(ENABLE_SPECTRUM),1)
 CFLAGS += -DENABLE_SPECTRUM
+endif
+ifeq ($(ENABLE_SPECTRUM_AUTOMATIC_SQUELCH),1)
+CFLAGS += -DSPECTRUM_AUTOMATIC_SQUELCH
 endif
 ifeq ($(ENABLE_SWD),1)
 	CFLAGS += -DENABLE_SWD
@@ -331,6 +337,8 @@ endif
 ifeq ($(ENABLE_NO_CODE_SCAN_TIMEOUT),1)
 	CFLAGS  += -DENABLE_NO_CODE_SCAN_TIMEOUT
 endif
+# Keep in sync with tools/host_tests/build.sh's CFLAGS -- see that file's own
+# comment for why.
 ifeq ($(ENABLE_AM_FIX),1)
 	CFLAGS  += -DENABLE_AM_FIX
 endif

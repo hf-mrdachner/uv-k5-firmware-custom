@@ -822,12 +822,6 @@ uint16_t BK4819_GetRegValue(RegisterSpec s) {
   return (BK4819_ReadRegister(s.num) >> s.offset) & s.mask;
 }
 
-void BK4819_TuneTo(uint32_t f, bool precise) {
-  (void)precise;
-  BK4819_SetFrequency(f);
-  BK4819_PickRXFilterPathBasedOnFrequency(f);
-}
-
 void BK4819_ToggleAFDAC(bool on) {
   uint16_t reg = BK4819_ReadRegister(BK4819_REG_30);
   if (on)

@@ -17,9 +17,6 @@
 #ifndef SPECTRUM_H
 #define SPECTRUM_H
 
-#include "../am_fix.h"
-#include "../app/finput.h"
-#include "../app/uart.h"
 #include "../bitmaps.h"
 #include "../board.h"
 #include "../bsp/dp32g030/gpio.h"
@@ -30,28 +27,61 @@
 #include "../driver/st7565.h"
 #include "../driver/system.h"
 #include "../driver/systick.h"
-#include "../external/CMSIS_5/Device/ARM/ARMCM0/Include/ARMCM0.h"
 #include "../external/printf/printf.h"
 #include "../font.h"
-#include "../frequencies.h"
 #include "../helper/battery.h"
-#include "../helper/measurements.h"
 #include "../misc.h"
 #include "../radio.h"
 #include "../settings.h"
-#include "../ui/battery.h"
 #include "../ui/helper.h"
-#include "../ui/main.h"
 #include <stdbool.h>
 #include <stdint.h>
 #include <string.h>
 
 static const uint8_t DrawingEndY = 40;
 
-static const uint8_t gStepSettingToIndex[] = {
-    [STEP_2_5kHz] = 4,  [STEP_5_0kHz] = 5,  [STEP_6_25kHz] = 6,
-    [STEP_10_0kHz] = 8, [STEP_12_5kHz] = 9, [STEP_25_0kHz] = 10,
-    [STEP_8_33kHz] = 7,
+static const uint8_t U8RssiMap[] = {
+    121, 115, 109, 103, 97, 91, 85, 79, 73, 63,
+};
+
+static const uint16_t scanStepValues[] = {
+    1, 10, 50, 100, 250, 500, 625, 833, 
+    1000, 1250, 1500, 2000, 2500, 5000, 10000,
+};
+
+static const uint16_t scanStepBWRegValues[] = {
+    //     RX  RXw TX  BW
+    // 0b0 000 000 001 01 1000
+    // 1
+    0b0000000001011000, // 6.25
+    // 10
+    0b0000000001011000, // 6.25
+    // 50
+    0b0000000001011000, // 6.25
+    // 100
+    0b0000000001011000, // 6.25
+    // 250
+    0b0000000001011000, // 6.25
+    // 500
+    0b0010010001011000, // 6.25
+    // 625
+    0b0100100001011000, // 6.25
+    // 833
+    0b0110110001001000, // 6.25
+    // 1000
+    0b0110110001001000, // 6.25
+    // 1250
+    0b0111111100001000, // 6.25
+    // 1500
+    0b0011011000101000, // 25
+    // 2000
+    0b0011011000101000, // 25
+    // 2500
+    0b0011011000101000, // 25
+    // 5000
+    0b0011011000101000, // 25
+    // 10000
+    0b0011011000101000, // 25
 };
 
 static const uint16_t listenBWRegValues[] = {
@@ -73,18 +103,74 @@ typedef enum StepsCount {
   STEPS_16,
 } StepsCount;
 
-typedef STEP_Setting_t ScanStep;
+typedef enum ScanStep {
+  S_STEP_0_01kHz,
+  S_STEP_0_1kHz,
+  S_STEP_0_5kHz,
+  S_STEP_1_0kHz,
+
+  S_STEP_2_5kHz,
+  S_STEP_5_0kHz,
+  S_STEP_6_25kHz,
+  S_STEP_8_33kHz,
+  S_STEP_10_0kHz,
+  S_STEP_12_5kHz,
+  S_STEP_15_0kHz,
+  S_STEP_20_0kHz,
+  S_STEP_25_0kHz,
+  S_STEP_50_0kHz,
+  S_STEP_100_0kHz,
+} ScanStep;
+
+typedef struct FreqPreset {
+  char name[8]; // max 7 chars + null; fits all BK4819-receivable band names
+  uint32_t fStart;
+  uint32_t fEnd;
+  StepsCount stepsCountIndex;
+  ScanStep stepSizeIndex;
+  ModulationMode_t modulationType;
+  BK4819_FilterBandwidth_t listenBW;
+} FreqPreset;
+
+// Presets below 18 MHz omitted: BK4819 hardware minimum is 18 MHz.
+static const FreqPreset freqPresets[] = {
+    {"15mBC",  1890000,  1902000, STEPS_128, S_STEP_5_0kHz,   MODULATION_AM, BK4819_FILTER_BW_NARROW},
+    {"15mHam", 2100000,  2144990, STEPS_128, S_STEP_1_0kHz,   MODULATION_USB, BK4819_FILTER_BW_NARROWER},
+    {"13mBC",  2145000,  2185000, STEPS_128, S_STEP_5_0kHz,   MODULATION_AM, BK4819_FILTER_BW_NARROW},
+    {"12mHam", 2489000,  2499000, STEPS_128, S_STEP_1_0kHz,   MODULATION_USB, BK4819_FILTER_BW_NARROWER},
+    {"11mBC",  2567000,  2610000, STEPS_128, S_STEP_5_0kHz,   MODULATION_AM, BK4819_FILTER_BW_NARROW},
+    {"CB",     2697500,  2799990, STEPS_128, S_STEP_5_0kHz,   MODULATION_FM, BK4819_FILTER_BW_NARROW},
+    {"10mHam", 2800000,  2970000, STEPS_128, S_STEP_1_0kHz,   MODULATION_USB, BK4819_FILTER_BW_NARROWER},
+    {"6mHam",  5000000,  5400000, STEPS_128, S_STEP_1_0kHz,   MODULATION_USB, BK4819_FILTER_BW_NARROWER},
+    {"AirBand",11800000, 13500000,STEPS_128, S_STEP_100_0kHz, MODULATION_AM, BK4819_FILTER_BW_NARROW},
+    {"2mHam",  14400000, 14800000,STEPS_128, S_STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
+    {"Railway",15175000, 15599990,STEPS_128, S_STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
+    {"Sea",    15600000, 16327500,STEPS_128, S_STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
+    {"Satcom", 24300000, 27000000,STEPS_128, S_STEP_5_0kHz,   MODULATION_FM, BK4819_FILTER_BW_WIDE},
+    {"River1", 30001250, 30051250,STEPS_64,  S_STEP_12_5kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
+    {"River2", 33601250, 33651250,STEPS_64,  S_STEP_12_5kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
+    {"LPD",    43307500, 43477500,STEPS_128, S_STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
+    {"PMR",    44600625, 44620000,STEPS_32,  S_STEP_6_25kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
+    {"FRS 462",46256250, 46272500,STEPS_16,  S_STEP_12_5kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
+    {"FRS 467",46756250, 46771250,STEPS_16,  S_STEP_12_5kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
+    {"LoRaWAN",86400000, 86900000,STEPS_128, S_STEP_100_0kHz, MODULATION_FM, BK4819_FILTER_BW_WIDE},
+    {"GSM-UP", 89000000, 91500000,STEPS_128, S_STEP_100_0kHz, MODULATION_FM, BK4819_FILTER_BW_WIDE},
+    {"GSM-DN", 93500000, 96000000,STEPS_128, S_STEP_100_0kHz, MODULATION_FM, BK4819_FILTER_BW_WIDE},
+    {"23cmHam",124000000,130000000,STEPS_128,S_STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
+};
 
 typedef struct SpectrumSettings {
+  uint32_t frequencyChangeStep;  
   StepsCount stepsCount;
   ScanStep scanStepIndex;
-  uint32_t frequencyChangeStep;
+  uint16_t scanDelay;
   uint16_t rssiTriggerLevel;
-
-  bool backlightState;
+  BK4819_FilterBandwidth_t bw;
   BK4819_FilterBandwidth_t listenBw;
+  int dbMin;
+  int dbMax;  
   ModulationMode_t modulationType;
-  uint16_t delayUS;
+  bool backlightState;
 } SpectrumSettings;
 
 typedef struct KeyboardState {
@@ -95,317 +181,21 @@ typedef struct KeyboardState {
 
 typedef struct ScanInfo {
   uint16_t rssi, rssiMin, rssiMax;
-  uint8_t i, iPeak;
+  uint16_t i, iPeak;
   uint32_t f, fPeak;
   uint16_t scanStep;
-  uint8_t measurementsCount;
-  bool gotRssi;
+  uint16_t measurementsCount;
 } ScanInfo;
 
 typedef struct PeakInfo {
   uint16_t t;
   uint16_t rssi;
-  uint8_t i;
   uint32_t f;
+  uint16_t i;
 } PeakInfo;
-
-typedef struct MovingAverage {
-  uint16_t mean[128];
-  uint16_t buf[4][128];
-  uint16_t min, mid, max;
-  uint16_t t;
-} MovingAverage;
-
-typedef struct FreqPreset {
-  char name[8]; // max 7 chars + null; fits all BK4819-receivable band names
-  uint32_t fStart;
-  uint32_t fEnd;
-  StepsCount stepsCountIndex;
-  uint8_t stepSizeIndex;
-  ModulationMode_t modulationType;
-  BK4819_FilterBandwidth_t listenBW;
-} FreqPreset;
-
-// Presets below 18 MHz omitted: BK4819 hardware minimum is 18 MHz.
-static const FreqPreset freqPresets[] = {
-    {"15mBC",  1890000,  1902000, STEPS_128, STEP_5_0kHz,   MODULATION_AM, BK4819_FILTER_BW_NARROW},
-    {"15mHam", 2100000,  2144990, STEPS_128, STEP_1_0kHz,   MODULATION_USB, BK4819_FILTER_BW_NARROWER},
-    {"13mBC",  2145000,  2185000, STEPS_128, STEP_5_0kHz,   MODULATION_AM, BK4819_FILTER_BW_NARROW},
-    {"12mHam", 2489000,  2499000, STEPS_128, STEP_1_0kHz,   MODULATION_USB, BK4819_FILTER_BW_NARROWER},
-    {"11mBC",  2567000,  2610000, STEPS_128, STEP_5_0kHz,   MODULATION_AM, BK4819_FILTER_BW_NARROW},
-    {"CB",     2697500,  2799990, STEPS_128, STEP_5_0kHz,   MODULATION_FM, BK4819_FILTER_BW_NARROW},
-    {"10mHam", 2800000,  2970000, STEPS_128, STEP_1_0kHz,   MODULATION_USB, BK4819_FILTER_BW_NARROWER},
-    {"6mHam",  5000000,  5400000, STEPS_128, STEP_1_0kHz,   MODULATION_USB, BK4819_FILTER_BW_NARROWER},
-    {"AirBand",11800000, 13500000,STEPS_128, STEP_100_0kHz, MODULATION_AM, BK4819_FILTER_BW_NARROW},
-    {"2mHam",  14400000, 14800000,STEPS_128, STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
-    {"Railway",15175000, 15599990,STEPS_128, STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
-    {"Sea",    15600000, 16327500,STEPS_128, STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
-    {"Satcom", 24300000, 27000000,STEPS_128, STEP_5_0kHz,   MODULATION_FM, BK4819_FILTER_BW_WIDE},
-    {"River1", 30001250, 30051250,STEPS_64,  STEP_12_5kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
-    {"River2", 33601250, 33651250,STEPS_64,  STEP_12_5kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
-    {"LPD",    43307500, 43477500,STEPS_128, STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
-    {"PMR",    44600625, 44620000,STEPS_32,  STEP_6_25kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
-    {"FRS 462",46256250, 46272500,STEPS_16,  STEP_12_5kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
-    {"FRS 467",46756250, 46771250,STEPS_16,  STEP_12_5kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
-    {"LoRaWAN",86400000, 86900000,STEPS_128, STEP_100_0kHz, MODULATION_FM, BK4819_FILTER_BW_WIDE},
-    {"GSM-UP", 89000000, 91500000,STEPS_128, STEP_100_0kHz, MODULATION_FM, BK4819_FILTER_BW_WIDE},
-    {"GSM-DN", 93500000, 96000000,STEPS_128, STEP_100_0kHz, MODULATION_FM, BK4819_FILTER_BW_WIDE},
-    {"23cmHam",124000000,130000000,STEPS_128,STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
-};
-
-#ifdef ENABLE_ALL_REGISTERS
-static const RegisterSpec hiddenRegisterSpecs[] = {
-    {},
-    /* {"tail", 0x0c, 12, 0b11, 0},
-    {"cdcss", 0x0c, 14, 0b11, 0},
-    {"ctcss F", 0x68, 0, 0b1111111111111, 0},
-
-    {"FSK Tx Finished INT", 0x3F, 15, 1, 1},
-    {"FSK FIFO Alm Empty INT", 0x3F, 14, 1, 1},
-    {"FSK Rx Finished INT", 0x3F, 13, 1, 1},
-    {"FSK FIFO Alm Full INT", 0x3F, 12, 1, 1},
-    {"DTMF/5TON Found INT", 0x3F, 11, 1, 1},
-    {"CT/CD T Found INT", 0x3F, 10, 1, 1},
-    {"CDCSS Found INT", 0x3F, 9, 1, 1},
-    {"CDCSS Lost INT", 0x3F, 8, 1, 1},
-    {"CTCSS Found INT", 0x3F, 7, 1, 1},
-    {"CTCSS Lost INT", 0x3F, 6, 1, 1},
-    {"VoX Found INT", 0x3F, 5, 1, 1},
-    {"VoX Lost INT", 0x3F, 4, 1, 1},
-    {"Squelch Found INT", 0x3F, 3, 1, 1},
-    {"Squelch Lost INT", 0x3F, 2, 1, 1},
-    {"FSK Rx Sync INT", 0x3F, 1, 1, 1}, */
-
-    {"XTAL F Mode Select", 0x3C, 6, 0b11, 1},
-    {"IF step100x", 0x3D, 0, 0xFFFF, 100},
-    {"IF step1x", 0x3D, 0, 0xFFFF, 1},
-    {"RFfiltBW1.7-4.5khz ", 0x43, 12, 0b111, 1},
-    {"RFfiltBWweak1.7-4.5khz", 0x43, 9, 0b111, 1},
-    {"AFTxLPF2fltBW1.7-4.5khz", 0x43, 6, 0b111, 1},
-    {"BW Mode Selection", 0x43, 4, 0b11, 1},
-    {"XTAL F Low-16bits", 0x3B, 0, 0xFFFF, 1},
-    {"XTAL F Low-16bits 100", 0x3B, 0, 0xFFFF, 100},
-    {"XTAL F High-8bits", 0x3C, 8, 0xFF, 1},
-    {"XTAL F reserved flt", 0x3C, 0, 0b111111, 1},
-    {"XTAL Enable", 0x37, 1, 1, 1},
-
-    // {"DSP Voltage Setting", 0x37, 12, 0b111, 1},
-    {"ANA LDO Selection", 0x37, 11, 1, 1},
-    {"VCO LDO Selection", 0x37, 10, 1, 1},
-    {"RF LDO Selection", 0x37, 9, 1, 1},
-    {"PLL LDO Selection", 0x37, 8, 1, 1},
-    {"ANA LDO Bypass", 0x37, 7, 1, 1},
-    {"VCO LDO Bypass", 0x37, 6, 1, 1},
-    {"RF LDO Bypass", 0x37, 5, 1, 1},
-    {"PLL LDO Bypass", 0x37, 4, 1, 1},
-
-    {"Freq Scan Indicator", 0x0D, 15, 1, 1},
-    {"F Scan High 16 bits", 0x0D, 0, 0xFFFF, 1},
-    {"F Scan Low 16 bits", 0x0E, 0, 0xFFFF, 1},
-
-    {"AGC fix", 0x7E, 15, 0b1, 1},
-    {"AGC idx", 0x7E, 12, 0b111, 1},
-    {"49", 0x49, 0, 0xFFFF, 100},
-    {"7B", 0x7B, 0, 0xFFFF, 100},
-    {"rssi_rel", 0x65, 8, 0xFF, 1},
-    {"agc_rssi", 0x62, 8, 0xFF, 1},
-    {"lna_peak_rssi", 0x62, 0, 0xFF, 1},
-    {"rssi_sq", 0x67, 0, 0xFF, 1},
-    {"weak_rssi 1", 0x0C, 7, 1, 1},
-    {"ext_lna_gain set", 0x2C, 0, 0b11111, 1},
-    {"snr_out", 0x61, 8, 0xFF, 1},
-    {"noise sq", 0x65, 0, 0xFF, 1},
-    {"glitch", 0x63, 0, 0xFF, 1},
-
-    {"soft_mute_en 1", 0x20, 12, 1, 1},
-    {"SNR Threshold SoftMut", 0x20, 0, 0b111111, 1},
-    {"soft_mute_atten", 0x20, 6, 0b11, 1},
-    {"soft_mute_rate", 0x20, 8, 0b11, 1},
-
-    {"Band Selection Thr", 0x3E, 0, 0xFFFF, 100},
-
-    {"chip_id", 0x00, 0, 0xFFFF, 1},
-    {"rev_id", 0x01, 0, 0xFFFF, 1},
-
-    {"aerror_en 0am 1fm", 0x30, 9, 1, 1},
-    {"bypass 1tx 0rx", 0x47, 0, 1, 1},
-    {"bypass tx gain 1", 0x47, 1, 1, 1},
-    {"bps afdac 3tx 9rx ", 0x47, 8, 0b1111, 1},
-    {"bps tx dcc=0 ", 0x7E, 3, 0b111, 1},
-
-    {"audio_tx_mute1", 0x50, 15, 1, 1},
-    {"audio_tx_limit_bypass1", 0x50, 10, 1, 1},
-    {"audio_tx_limit320", 0x50, 0, 0x3FF, 1},
-    {"audio_tx_limit reserved7", 0x50, 11, 0b1111, 1},
-
-    {"audio_tx_path_sel", 0x2D, 2, 0b11, 1},
-
-    {"AFTx Filt Bypass All", 0x47, 0, 1, 1},
-    {"3kHz AF Resp K Tx", 0x74, 0, 0xFFFF, 100},
-    {"MIC Sensit Tuning", 0x7D, 0, 0b11111, 1},
-    {"DCFiltBWTxMICIn15-480hz", 0x7E, 3, 0b111, 1},
-    afOutRegSpec,
-    {"04 768", 0x04, 0, 0x0300, 1},
-    {"43 32264", 0x43, 0, 0x7E08, 1},
-    afDacGainRegSpec,
-    {"4b 58434", 0x4b, 0, 0xE442, 1},
-    {"73 22170", 0x73, 0, 0x569A, 1},
-    {"7E 13342", 0x7E, 0, 0x341E, 1},
-    {"47 26432 24896", 0x47, 0, 0x6740, 1},
-    {"03 49662 49137", 0x30, 0, 0xC1FE, 1},
-
-    {"Enable Compander", 0x31, 3, 1, 1},
-    {"Band-Gap Enable", 0x37, 0, 1, 1},
-    {"IF step100x", 0x3D, 0, 0xFFFF, 100},
-    {"IF step1x", 0x3D, 0, 0xFFFF, 1},
-    {"Band Selection Thr", 0x3E, 0, 0xFFFF, 1},
-    {"RF filt BW ", 0x43, 12, 0b111, 1},
-    {"RF filt BW weak", 0x43, 9, 0b111, 1},
-    {"BW Mode Selection", 0x43, 4, 0b11, 1},
-    {"AF Output Inverse", 0x47, 13, 1, 1},
-
-    {"AF ALC Disable", 0x4B, 5, 1, 1},
-    {"AFC Range Select", 0x73, 11, 0b111, 1},
-    afcDisableRegSpec,
-    {"AGC Fix Mode", 0x7E, 15, 1, 1},
-    {"AGC Fix Index", 0x7E, 12, 0b111, 1},
-
-    /*   {"LNAs 10", 0x10, 8, 0b11, 1},
-       {"LNA 10", 0x10, 5, 0b111, 1},
-       {"MIX 10", 0x10, 3, 0b11, 1},
-       {"PGA 10", 0x10, 0, 0b111, 1},
-       {"LNAs 11", 0x11, 8, 0b11, 1},
-       {"LNA 11", 0x11, 5, 0b111, 1},
-       {"MIX 11", 0x11, 3, 0b11, 1},
-       {"PGA 11", 0x11, 0, 0b111, 1},
-       {"LNAs 12", 0x12, 8, 0b11, 1},
-       {"LNA 12", 0x12, 5, 0b111, 1},
-       {"MIX 12", 0x12, 3, 0b11, 1},
-       {"PGA 12", 0x12, 0, 0b111, 1},
-       {"LNAs 13", 0x13, 8, 0b11, 1},
-       {"LNA 13", 0x13, 5, 0b111, 1},
-       {"MIX 13", 0x13, 3, 0b11, 1},
-       {"PGA 13", 0x13, 0, 0b111, 1},
-       {"LNAs 14", 0x14, 8, 0b11, 1},
-       {"LNA 14", 0x14, 5, 0b111, 1},
-       {"MIX 14", 0x14, 3, 0b11, 1},
-       {"PGA 14", 0x14, 0, 0b111, 1},
-   */
-    {"Crystal vReg Bit", 0x1A, 12, 0b1111, 1},
-    {"Crystal iBit", 0x1A, 8, 0b1111, 1},
-    {"PLL CP bit", 0x1F, 0, 0b1111, 1},
-    {"PLL/VCO Enable", 0x30, 4, 0xF, 1},
-    {"Exp AF Rx Ratio", 0x28, 14, 0b11, 1},
-    {"Exp AF Rx 0 dB", 0x28, 7, 0x7F, 1},
-    {"Exp AF Rx noise", 0x28, 0, 0x7F, 1},
-    {"OFF AFRxHPF300 flt", 0x2B, 10, 1, 1},
-    {"OFF AF RxLPF3K flt", 0x2B, 9, 1, 1},
-    {"OFF AF Rx de-emp", 0x2B, 8, 1, 1},
-    {"Gain after FM Demod", 0x43, 2, 1, 1},
-    {"AF Rx Gain1", 0x48, 10, 0x11, 1},
-    {"AF Rx Gain2", 0x48, 4, 0b111111, 1},
-    {"AF DAC G after G1 G2", 0x48, 0, 0b1111, 1},
-    {"300Hz AF Resp K Rx", 0x54, 0, 0xFFFF, 100},
-    {"300Hz AF Resp K Rx", 0x55, 0, 0xFFFF, 100},
-    {"3kHz AF Resp K Rx", 0x75, 0, 0xFFFF, 100},
-    {"DC Filt BW Rx IF In", 0x7E, 0, 0b111, 1},
-
-    {"MIC AGC Disable", 0x19, 15, 1, 1},
-    {"Compress AF Tx Ratio", 0x29, 14, 0b11, 1},
-    {"Compress AF Tx 0 dB", 0x29, 7, 0x7F, 1},
-    {"Compress AF Tx noise", 0x29, 0, 0x7F, 1},
-    {"OFF AFTxHPF300filter", 0x2B, 2, 1, 1},
-    {"OFF AFTxLPF1filter", 0x2B, 1, 1, 1},
-    {"OFF AFTxpre-emp flt", 0x2B, 0, 1, 1},
-    {"PA Gain Enable", 0x30, 3, 1, 1},
-    {"PA Biasoutput 0~3", 0x36, 8, 0xFF, 1},
-    {"PA Gain1 Tuning", 0x36, 3, 0b111, 1},
-    {"PA Gain2 Tuning", 0x36, 0, 0b111, 1},
-    {"RF TxDeviation ON", 0x40, 12, 1, 1},
-    {"RF Tx Deviation", 0x40, 0, 0xFFF, 10},
-    {"300Hz AF Resp K Tx", 0x44, 0, 0xFFFF, 100},
-    {"300Hz AF Resp K Tx", 0x45, 0, 0xFFFF, 100},
-
-    /*	{"REG03 en af for afout3", 0x03, 9, 1, 1},
-            {"tx mute dtmf REG_50", 0x50, 15, 1, 1},
-            {"tx ctcss en REG_51", 0x51, 15, 1, 1},
-            {"tx dsp en REG_30", 0x30, 1, 1, 1},
-            {"disc mode dis reg30", 0x30, 8, 1, 1},
-            */
-
-};
-#endif
-
-// Wrapper: set modulation (avoids circular dep between bk4819.h and radio.h)
-static inline void BK4819_SetModulation(ModulationMode_t m) {
-  RADIO_SetModulation(m);
-}
-
-// Apply TX frequency offset from VFO settings
-static inline uint32_t GetOffsetedF(VFO_Info_t *vfo, uint32_t f) {
-  switch (vfo->TX_OFFSET_FREQUENCY_DIRECTION) {
-  case TX_OFFSET_FREQUENCY_DIRECTION_ADD:
-    return f + vfo->TX_OFFSET_FREQUENCY;
-  case TX_OFFSET_FREQUENCY_DIRECTION_SUB:
-    return f - vfo->TX_OFFSET_FREQUENCY;
-  default:
-    return f;
-  }
-}
-
-// Identity mappings (no frequency transform needed in this implementation)
-static inline uint32_t GetTuneF(uint32_t f)  { return f; }
-static inline uint32_t GetScreenF(uint32_t f) { return f; }
-
-// TX allowed check
-static inline bool IsTXAllowed(uint32_t f) { return TX_freq_check(f) == 0; }
-
-// Draw a vertical line in the framebuffer at column x, from row y1 to y2
-static inline void DrawVLine(uint8_t x, uint8_t y1, uint8_t y2, bool black) {
-  UI_DrawLineBuffer(gFrameBuffer, x, y1, x, y2, black);
-}
-
-// Set/clear one pixel in the framebuffer (color=0 → white, color!=0 → black)
-static inline void PutPixel(uint8_t x, uint8_t y, uint8_t color) {
-  UI_DrawPixelBuffer(gFrameBuffer, x, y, color != 0);
-}
-
-// Render a string using the 3×5 pixel font.
-// x, y: top-left pixel in full-screen coordinates (0..63).
-//   y < 8  → render into gStatusLine
-//   y >= 8 → render into gFrameBuffer (framebuffer y = screen_y - 8)
-// align: currently unused (always left-aligned from x)
-// color: true = black text, false = white text (assumes background already filled)
-static inline void UI_PrintStringSmallest(const char *str, uint8_t x, uint8_t y,
-                                          bool align, bool color) {
-  (void)align;
-  for (uint8_t i = 0; str[i] != '\0'; i++) {
-    uint8_t ch = (uint8_t)str[i];
-    if (ch < 0x20 || ch > 0x7F)
-      continue;
-    uint8_t char_idx = ch - 0x20;
-    for (uint8_t col = 0; col < 3; col++) {
-      uint8_t col_data = gFont3x5[char_idx][col];
-      uint16_t px = x + i * 4 + col;
-      if (px >= 128)
-        break;
-      for (uint8_t row = 0; row < 5; row++) {
-        if ((col_data >> row) & 1u) {
-          uint8_t py = y + row;
-          if (py < 8) {
-            if (color)
-              gStatusLine[px] |= (1u << py);
-            else
-              gStatusLine[px] &= ~(1u << py);
-          } else {
-            UI_DrawPixelBuffer(gFrameBuffer, px, py - 8, color);
-          }
-        }
-      }
-    }
-  }
-}
 
 void APP_RunSpectrum(void);
 
 #endif /* ifndef SPECTRUM_H */
+
+// vim: ft=c
