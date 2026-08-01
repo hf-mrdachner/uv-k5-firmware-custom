@@ -12,4 +12,5 @@ k5_eeprom.raw
 *~
 __pycache__/
 .worktrees/
+.superpowers/
 
