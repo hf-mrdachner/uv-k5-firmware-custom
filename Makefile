@@ -118,6 +118,7 @@ endif
 OBJS += app/app.o
 ifeq ($(ENABLE_ARDF),1)
 	OBJS += app/ardf.o
+	OBJS += app/ardf_df_simple.o
 endif
 OBJS += app/chFrScanner.o
 OBJS += app/common.o
