@@ -1245,14 +1245,19 @@ bool HandleUserInput() {
 }
 
 static void Scan() {
-  // Bounds-check scanInfo.i before touching rssiHistory[]: with an active
-  // scan range, GetStepsCount() can return an unbounded measurementsCount
-  // (see the KEY_3/KEY_9 guard above), so scanInfo.i can run past the
-  // 128-entry rssiHistory[] array. Skip the measurement entirely rather
-  // than reading/writing out of bounds (confirmed via ASan: this used to
-  // be a real global-buffer-overflow, both on the read here and on the
-  // write inside Measure() -> SetRssiHistory()).
-  if (scanInfo.i < ARRAY_SIZE(rssiHistory) && rssiHistory[scanInfo.i] != RSSI_MAX_VALUE
+  // scanInfo.i ranges over [0, measurementsCount) during a real sweep, but
+  // UpdateScan() calls Scan() once more with scanInfo.i == measurementsCount
+  // (its own completion check runs AFTER this call) -- that one call must
+  // never measure, at any measurementsCount, or it writes/reads past
+  // rssiHistory[]'s 128 entries (confirmed via ASan). The separate
+  // `scanInfo.i >= ARRAY_SIZE(rssiHistory)` clause below only guards the
+  // *read* of rssiHistory[scanInfo.i] here: with an active wide scan range
+  // (ENABLE_SCAN_RANGES, measurementsCount > 128), scanInfo.i legitimately
+  // runs past 127 for every real step, and SetRssiHistory() (called via
+  // Measure() below) already compresses those indices safely -- so those
+  // steps must still be measured, just without this direct array read.
+  if (scanInfo.i < scanInfo.measurementsCount
+    && (scanInfo.i >= ARRAY_SIZE(rssiHistory) || rssiHistory[scanInfo.i] != RSSI_MAX_VALUE)
 #ifdef ENABLE_SCAN_RANGES
   && !IsBlacklisted(scanInfo.i)
 #endif

@@ -14,7 +14,10 @@
 
 #include <stdint.h>
 
-#define FAKE_RSSI_PROFILE_MAX 256
+// 512 leaves headroom above the widest ENABLE_SCAN_RANGES regression probe
+// (a 5 MHz / 12.5kHz scan = 400 steps, needing 401 profile entries -- see
+// test_wide_scan_range_measures_past_128_steps in test_spectrum.c).
+#define FAKE_RSSI_PROFILE_MAX 512
 
 extern uint16_t fake_rssi_profile[FAKE_RSSI_PROFILE_MAX];
 extern int fake_rssi_profile_len;

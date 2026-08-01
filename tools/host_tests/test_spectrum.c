@@ -414,6 +414,76 @@ static void test_app_run_spectrum_skips_preset_when_scan_range_active(void) {
     CHECK(settings.scanStepIndex == S_STEP_12_5kHz); // the scan-range path's own step, NOT 2mHam's S_STEP_25_0kHz
     CHECK(settings.modulationType == MODULATION_AM); // NOT overwritten to 2mHam's FM -- confirms ApplyPreset never ran
 }
+
+// ---------------------------------------------------------------------
+// Regression test: a wide ENABLE_SCAN_RANGES scan (measurementsCount >
+// 128, e.g. a several-MHz range at a fine step) must measure every step
+// across the FULL range, not silently stop advancing after step 127.
+// A prior fix for a real rssiHistory[] out-of-bounds read (confirmed via
+// ASan) initially over-corrected by skipping measurement entirely once
+// scanInfo.i reached 128, which is wrong: SetRssiHistory() already
+// compresses indices > 128 down into the 128-entry rssiHistory[] safely,
+// so those steps must still be measured via Scan() -> Measure() ->
+// BK4819_GetRSSI(), just without Scan()'s own direct array read.
+//
+// Expects fake_rssi_profile_pos == n - 1, not n+1: UpdateScan()'s own
+// completion call (scanInfo.i == measurementsCount) never measures (see
+// its own comment above Scan()), accounting for one side of the gap, and
+// bin 0 of every fresh sweep is never measured either -- a separate,
+// pre-existing IsBlacklisted() bug (see run_fake_sweep's comment above):
+// blacklistFreqs[] is all zero right after ResetBlacklist(), so
+// IsBlacklisted(0) spuriously matches slot 0's zero *entry* against
+// frequency-bin *index* 0. That second bug is orthogonal to the one
+// under test here (it swallows exactly one bin, regardless of range
+// width) and out of scope to fix in this change; confirmed empirically
+// (fake_rssi_profile_pos == 399 for n == 400) rather than assumed.
+// ---------------------------------------------------------------------
+static void test_wide_scan_range_measures_past_128_steps(void) {
+    printf("\n-- test_wide_scan_range_measures_past_128_steps --\n");
+
+    gScanRangeStart = 10000000; // 100.00000 MHz
+    gScanRangeStop  = 10500000; // 105.00000 MHz (5 MHz wide)
+    gVfoInfoStub.StepFrequency = 1250; // picks S_STEP_12_5kHz below
+
+    // Mirrors what APP_RunSpectrum() does when gScanRangeStart is active:
+    // pick the scan step from gTxVfo->StepFrequency, force STEPS_128 (this
+    // setting is unused for the actual measurement count when a scan
+    // range is active -- see GetStepsCount()'s ENABLE_SCAN_RANGES branch).
+    for (uint8_t i = 0; i < ARRAY_SIZE(scanStepValues); i++) {
+        if (scanStepValues[i] >= gVfoInfoStub.StepFrequency) {
+            settings.scanStepIndex = i;
+            break;
+        }
+    }
+    settings.stepsCount = STEPS_128;
+    settings.rssiTriggerLevel = RSSI_MAX_VALUE; // never divert into UpdateListening()
+
+    CHECK(GetScanStep() == 1250); // S_STEP_12_5kHz
+    uint16_t expectedSteps = (gScanRangeStop - gScanRangeStart) / GetScanStep();
+    CHECK(expectedSteps == 400); // 5,000,000 / 12,500 (10Hz units)
+
+    uint16_t n = expectedSteps;
+    for (int i = 0; i <= n && i < FAKE_RSSI_PROFILE_MAX; i++) fake_rssi_profile[i] = 300;
+    fake_rssi_profile_len = n + 1;
+    fake_rssi_profile_pos = 0;
+
+    RelaunchScan();
+    ResetBlacklist();
+    CHECK(scanInfo.measurementsCount == expectedSteps);
+
+    for (uint16_t i = 0; i <= n; i++) {
+        UpdateScan();
+    }
+
+    // The regression: a scan that silently stopped measuring at step 128
+    // would leave fake_rssi_profile_pos stuck around 128, never reaching
+    // the full sweep's real BK4819_GetRSSI() call count. (n, not n+1: see
+    // the bin-0/IsBlacklisted note above.)
+    CHECK(fake_rssi_profile_pos == n - 1);
+
+    gScanRangeStart = 0;
+    gScanRangeStop = 0;
+}
 #endif
 
 // ---------------------------------------------------------------------
@@ -461,6 +531,7 @@ int main(void) {
     test_app_run_spectrum_applies_preset_end_to_end();
 #ifdef ENABLE_SCAN_RANGES
     test_app_run_spectrum_skips_preset_when_scan_range_active();
+    test_wide_scan_range_measures_past_128_steps();
 #endif
     test_draw_status_shows_matched_preset_name();
 
