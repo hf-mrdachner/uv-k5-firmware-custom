@@ -25,6 +25,9 @@ jobs:
       - name: Run host-side spectrum tests
         run:  ./tools/host_tests/build.sh
 
+      - name: Run host-side ARDF DF-Simple tests
+        run:  ./tools/host_tests/build_ardf_df_simple.sh
+
   build:
     runs-on: ubuntu-22.04
     container:

@@ -30,6 +30,7 @@
 
 #ifdef ENABLE_ARDF
 #include "app/ardf.h"
+#include "app/ardf_df_simple.h"
 #endif
 
 static const uint32_t gDefaultFrequencyTable[] =
@@ -314,9 +315,18 @@ gARDFMistuneFreqRaw = 0;
 		gARDFCycleEndBeep_s = ARDF_CYCLE_END_BEEP_S_DEFAULT;
 	}
 
+	if ( (Data[4] == 0xFF) && (Data[5] == 0xFF) && (Data[6] == 0xFF) && (Data[7] == 0xFF) )
+	{
+		// eeprom empty. no DF-Simple backup present.
+		gARDFDFSimpleBackup.valid = false;
+	}
+	else
+	{
+		uint32_t dfSimpleBackupRaw;
+		memcpy(&dfSimpleBackupRaw, &Data[4], sizeof(dfSimpleBackupRaw));
+		ARDF_DFSimpleBackupUnpack(dfSimpleBackupRaw, &gARDFDFSimpleBackup);
+	}
 
-
-        
 #endif
 	
 	// 0F40..0F47
@@ -564,7 +574,7 @@ void SETTINGS_SaveARDF(void)
 			uint8_t  DFSimpleMode:1;
 
 			uint8_t  CycleEndBeep_s;
-			uint32_t free;
+			uint32_t DFSimpleBackup;
 		};
 		uint8_t __raw[8];
 	} __attribute__((packed)) ARDFCfg2;
@@ -587,6 +597,7 @@ void SETTINGS_SaveARDF(void)
 	ARDFCfg2.GainRemember = gARDFGainRemember;
 	ARDFCfg2.DFSimpleMode = gARDFDFSimpleMode;
 	ARDFCfg2.CycleEndBeep_s = gARDFCycleEndBeep_s;
+	ARDFCfg2.DFSimpleBackup = ARDF_DFSimpleBackupPack(&gARDFDFSimpleBackup);
 
 	EEPROM_WriteBuffer(0x0F20, ARDFCfg.__raw);
 	EEPROM_WriteBuffer(0x0F28, ARDFCfg2.__raw);
