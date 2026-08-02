@@ -27,8 +27,9 @@ typedef struct
 
 extern t_ardf_df_simple_backup gARDFDFSimpleBackup;
 
-// Snapshot the 8 fields above off the currently active VFO (gEeprom.RX_VFO)
-// into gARDFDFSimpleBackup and mark it valid. Call right before applying
+// Snapshot the 8 fields above off the VFO the menu operates on
+// (gEeprom.TX_VFO, i.e. gTxVfo -- the one DF Simple overrides) into
+// gARDFDFSimpleBackup and mark it valid. Call right before applying
 // DF-Simple's own forced values.
 void ARDF_DFSimpleBackup(void);
 

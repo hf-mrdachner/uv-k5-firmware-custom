@@ -531,17 +531,74 @@ void MENU_AcceptSetting(void)
 					// then apply its fixed, beginner-friendly settings
 					ARDF_DFSimpleBackup();
 
+					if ( gARDFGainRemember != 0 )
+					{
+						// forcing gain remember off below moves the live gain/mistune
+						// state from slot [vfo][gARDFActiveFox] to the shared slot
+						// [vfo][0]. Carry it over, exactly like the "on -> off" path
+						// of MENU_ARDF_GAIN_REMEMBER does, so slot 0 agrees with what
+						// is actually programmed into the BK4819 / the live frequency.
+						uint8_t grvfo = gEeprom.RX_VFO; // these arrays are RX_VFO indexed everywhere in app/ardf.c
+
+						ardf_mistune_active[grvfo][0]           = ardf_mistune_active[grvfo][gARDFActiveFox];
+						ardf_gain_index[grvfo][0]               = ardf_gain_index[grvfo][gARDFActiveFox];
+						ardf_gain_index_steps_mistune[grvfo][0] = ardf_gain_index_steps_mistune[grvfo][gARDFActiveFox];
+					}
+
 					gARDFNumFoxes = 0;
 					gARDFGainRemember = 0;
 					gEeprom.SQUELCH_LEVEL = 0;
-					gEeprom.VfoInfo[gEeprom.RX_VFO].Modulation = MODULATION_AM;
-					gEeprom.VfoInfo[gEeprom.RX_VFO].CHANNEL_BANDWIDTH = BANDWIDTH_U1K7;
-					gEeprom.VfoInfo[gEeprom.RX_VFO].STEP_SETTING = STEP_1_0kHz;
+					gTxVfo->Modulation = MODULATION_AM;
+					gTxVfo->CHANNEL_BANDWIDTH = BANDWIDTH_U1K7;
+					gTxVfo->STEP_SETTING = STEP_1_0kHz;
+
+					if ( IS_FREQ_CHANNEL(gTxVfo->CHANNEL_SAVE) )
+					{
+						// push the override into this VFO's own EEPROM row now,
+						// so the VFO_CONFIGURE reload below (which always
+						// re-reads a frequency channel from EEPROM regardless
+						// of configure mode -- see RADIO_ConfigureChannel)
+						// picks up the new values instead of reverting them
+						gRequestSaveChannel = 1;
+					}
 				}
 				else if ( (wasDFSimple != false) && (willBeDFSimple == false) )
 				{
 					// leaving DF Simple: bring back whatever was active before
 					ARDF_DFSimpleRestore();
+
+					if ( ((gSubMenuSelection & 0x01) != 0) && (gARDFGainRemember != 0) )
+					{
+						// the restore just took gain remember from 0 back to a
+						// non-zero value, which moves the live gain/mistune state
+						// from the shared slot [vfo][0] back to slot
+						// [vfo][gARDFActiveFox]. Reconcile hardware with the newly
+						// live slot exactly like the "off -> on" path of
+						// MENU_ARDF_GAIN_REMEMBER does.
+						// (ARDF enable is read off gSubMenuSelection because
+						// gSetting_ARDFEnable is only updated further below; if ARDF
+						// is being switched off entirely there is no live slot and
+						// touching the tuned frequency would only do harm.)
+						uint8_t grvfo = gEeprom.RX_VFO; // these arrays are RX_VFO indexed everywhere in app/ardf.c
+
+						if ( (ardf_mistune_active[grvfo][0] == false) && (ardf_mistune_active[grvfo][gARDFActiveFox] != false) )
+						{
+							// reenable mistuning
+							ARDF_DoMistuneFreq();
+						}
+						else if ( (ardf_mistune_active[grvfo][0] != false) && (ardf_mistune_active[grvfo][gARDFActiveFox] == false) )
+						{
+							// end mistuning
+							ARDF_UndoMistuneFreq();
+						}
+
+						ARDF_ActivateGainIndex();
+					}
+
+					if ( IS_FREQ_CHANNEL(gTxVfo->CHANNEL_SAVE) )
+					{
+						gRequestSaveChannel = 1;
+					}
 
 					gVfoConfigureMode    = VFO_CONFIGURE;
 					gFlagReconfigureVfos = true;
