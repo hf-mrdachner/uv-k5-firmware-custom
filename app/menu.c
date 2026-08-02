@@ -44,6 +44,7 @@
 
 #ifdef ENABLE_ARDF
 #include "app/ardf.h"
+#include "app/ardf_df_simple.h"
 #endif
 
 #ifndef ARRAY_SIZE
@@ -518,11 +519,34 @@ void MENU_AcceptSetting(void)
 			{
 				// DF simple mode implies ARDF on
 				gSubMenuSelection = 3;
+			}
 
-				// DF simple settings
-				gARDFNumFoxes = 0;
-				gARDFGainRemember = 0;
-				gEeprom.SQUELCH_LEVEL = 0;
+			{
+				bool wasDFSimple    = (gARDFDFSimpleMode != 0);
+				bool willBeDFSimple = ((gSubMenuSelection >> 1) & 0x01) != 0;
+
+				if ( (wasDFSimple == false) && (willBeDFSimple != false) )
+				{
+					// entering DF Simple: preserve what it's about to override,
+					// then apply its fixed, beginner-friendly settings
+					ARDF_DFSimpleBackup();
+
+					gARDFNumFoxes = 0;
+					gARDFGainRemember = 0;
+					gEeprom.SQUELCH_LEVEL = 0;
+					gEeprom.VfoInfo[gEeprom.RX_VFO].Modulation = MODULATION_AM;
+					gEeprom.VfoInfo[gEeprom.RX_VFO].CHANNEL_BANDWIDTH = BANDWIDTH_U1K7;
+					gEeprom.VfoInfo[gEeprom.RX_VFO].STEP_SETTING = STEP_1_0kHz;
+				}
+				else if ( (wasDFSimple != false) && (willBeDFSimple == false) )
+				{
+					// leaving DF Simple: bring back whatever was active before
+					ARDF_DFSimpleRestore();
+
+					gVfoConfigureMode    = VFO_CONFIGURE;
+					gFlagReconfigureVfos = true;
+					gUpdateStatus        = true;
+				}
 			}
 
 			if ( (gSubMenuSelection & 0x01) != 0 )
