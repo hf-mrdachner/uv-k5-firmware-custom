@@ -123,7 +123,7 @@ typedef enum ScanStep {
 } ScanStep;
 
 typedef struct FreqPreset {
-  char name[8]; // max 7 chars + null; fits all BK4819-receivable band names
+  char name[12]; // max 11 chars + null
   uint32_t fStart;
   uint32_t fEnd;
   StepsCount stepsCountIndex;

@@ -521,6 +521,11 @@ static void test_draw_status_shows_matched_preset_name(void) {
     CHECK(!name_area_has_content_no_match);
 }
 
+static void test_freq_preset_name_buffer_size(void) {
+    printf("\n-- test_freq_preset_name_buffer_size --\n");
+    CHECK(sizeof(freqPresets[0].name) == 12);
+}
+
 int main(void) {
     test_key3_key9_selects_nearest_preset();
     test_still_screen_no_collision();
@@ -534,6 +539,7 @@ int main(void) {
     test_wide_scan_range_measures_past_128_steps();
 #endif
     test_draw_status_shows_matched_preset_name();
+    test_freq_preset_name_buffer_size();
 
     printf("\n%s (%d failure%s)\n", failures ? "FAILED" : "PASSED",
            failures, failures == 1 ? "" : "s");
