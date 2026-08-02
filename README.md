@@ -170,8 +170,10 @@ You need a quansheng programming cable with an integrated USB to serial converte
 1. Draussenfuchs Mode can be enabled in the menu (ARDF = "DF Simple"). This enables **manual gain control** 
 stepping by pressing **UP/DOWN keys**. Smaller values have lower sensitivity. Use this close to loud transmitters.
 "DF Simple" mode automatically preconfigures the most important settings, so no manual setup is needed:
-frequency stepping (Step = 1.00kHz), amplitude demodulation (Demodu = AM) and bandwidth (W/N = U-)
-are set for you. Your previous settings are remembered and put back when "DF Simple" is switched off again.
+squelch (Sql = 0), dual watch (RxMode = MAIN ONLY), cross-band repeater mode (off), number of foxes (NumFox = 0),
+gain remember (GainRemember = 0), frequency stepping (Step = 1.00kHz), amplitude demodulation (Demodu = AM) and
+bandwidth (W/N = U-) are all set for you. Your previous settings are remembered and put back when "DF Simple" is
+switched off again.
 1. Enter frequency (Main Screen: 433920 for 433.92 MHz)
 
 That's it.
