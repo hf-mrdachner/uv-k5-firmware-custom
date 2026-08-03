@@ -23,17 +23,18 @@ typedef struct
     uint8_t          gain_remember; // gARDFGainRemember
     uint8_t          dual_watch;    // gEeprom.DUAL_WATCH
     uint8_t          cross_band;    // gEeprom.CROSS_BAND_RX_TX
+    int8_t           af_gain_offset; // gARDFAFGainOffset
 } t_ardf_df_simple_backup;
 
 extern t_ardf_df_simple_backup gARDFDFSimpleBackup;
 
-// Snapshot the 8 fields above off the VFO the menu operates on
+// Snapshot the 9 fields above off the VFO the menu operates on
 // (gEeprom.TX_VFO, i.e. gTxVfo -- the one DF Simple overrides) into
 // gARDFDFSimpleBackup and mark it valid. Call right before applying
 // DF-Simple's own forced values.
 void ARDF_DFSimpleBackup(void);
 
-// If gARDFDFSimpleBackup is valid, write its 8 fields back onto the VFO
+// If gARDFDFSimpleBackup is valid, write its 9 fields back onto the VFO
 // index it recorded (not necessarily the currently active VFO) and mark the
 // backup invalid. No-op if there is no valid backup.
 void ARDF_DFSimpleRestore(void);

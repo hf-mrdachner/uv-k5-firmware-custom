@@ -476,11 +476,15 @@ void APP_StartListening(FUNCTION_Type_t function)
 		gUpdateStatus    = true;
 	}
 
+#ifdef ENABLE_ARDF
+	ARDF_ApplyAFGain(); // AF Rx Gain-1/Gain-2/DAC Gain, gARDFAFGainOffset applied on top of calibration
+#else
 	BK4819_WriteRegister(BK4819_REG_48,
 		(11u << 12)                |     // ??? .. 0 to 15, doesn't seem to make any difference
 		( 0u << 10)                |     // AF Rx Gain-1
 		(gEeprom.VOLUME_GAIN << 4) |     // AF Rx Gain-2
 		(gEeprom.DAC_GAIN    << 0));     // AF DAC Gain (after Gain-1 and Gain-2)
+#endif
 
 #ifdef ENABLE_VOICE
 	if (gVoiceWriteIndex == 0)       // AM/FM RX mode will be set when the voice has finished

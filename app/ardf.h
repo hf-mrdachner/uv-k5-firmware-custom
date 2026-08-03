@@ -43,6 +43,16 @@
 #define ARDF_DEFAULT_DF_SIMPLE false
 #define ARDF_CLOCK_CORR_TICKS_PER_MIN (+00) // default clock correction
 
+// offset added onto gEeprom.DAC_GAIN (0..15, ~2dB/step) so loudness can be
+// dialed in purely digitally, with the physical volume knob left at a fixed,
+// reproducible position (e.g. fully clockwise). Range matches the 4-bit
+// two's complement encoding used for its DF-Simple backup (see
+// app/ardf_df_simple.c), and spans the full 0..15 DAC_GAIN range around the
+// typical factory-calibrated middle value of 8.
+#define ARDF_AF_GAIN_OFFSET_MIN (-8)
+#define ARDF_AF_GAIN_OFFSET_MAX 7
+#define ARDF_DEFAULT_AF_GAIN_OFFSET 0
+
 //#define ARDF_ENABLE_SHOW_DEBUG_DATA
 
 
@@ -75,6 +85,7 @@ extern bool                  gARDFRequestSaveEEPROM;
 extern int16_t               gARDFClockCorrAddTicksPerMin;
 extern int8_t                gARDFMistuneFreqRaw;
 extern uint8_t               gARDFMistuneAddGainIdxSteps;
+extern int8_t                gARDFAFGainOffset;
 #ifdef ARDF_ENABLE_SHOW_DEBUG_DATA
 extern int16_t               gARDFdebug;
 extern int16_t               gARDFdebug2;
@@ -95,6 +106,7 @@ extern int8_t ARDF_Get_GainDiff(void);
 extern void ARDF_DoMistuneFreq(void);
 extern void ARDF_UndoMistuneFreq(void);
 extern void ARDF_StopFreqMistune(void);
+extern void ARDF_ApplyAFGain(void);
 
 #endif
 

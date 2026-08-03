@@ -237,6 +237,11 @@ int MENU_GetLimits(uint8_t menu_id, int32_t *pMin, int32_t *pMax)
 			*pMax = ARDF_CYCLE_END_BEEP_S_MAX;
 			break;
 
+		case MENU_ARDF_AF_GAIN:
+			*pMin = ARDF_AF_GAIN_OFFSET_MIN;
+			*pMax = ARDF_AF_GAIN_OFFSET_MAX;
+			break;
+
 		case MENU_ARDF_MIST_FREQ:
 			*pMin = -128;
 			*pMax = 127;
@@ -551,6 +556,8 @@ void MENU_AcceptSetting(void)
 					gTxVfo->Modulation = MODULATION_AM;
 					gTxVfo->CHANNEL_BANDWIDTH = BANDWIDTH_U1K7;
 					gTxVfo->STEP_SETTING = STEP_1_0kHz;
+					gARDFAFGainOffset = ARDF_DEFAULT_AF_GAIN_OFFSET;
+					ARDF_ApplyAFGain();
 
 					if ( IS_FREQ_CHANNEL(gTxVfo->CHANNEL_SAVE) )
 					{
@@ -566,6 +573,7 @@ void MENU_AcceptSetting(void)
 				{
 					// leaving DF Simple: bring back whatever was active before
 					ARDF_DFSimpleRestore();
+					ARDF_ApplyAFGain();
 
 					if ( ((gSubMenuSelection & 0x01) != 0) && (gARDFGainRemember != 0) )
 					{
@@ -710,6 +718,19 @@ void MENU_AcceptSetting(void)
 			{
 				// value updated
 				gARDFCycleEndBeep_s = gSubMenuSelection;
+
+				gARDFRequestSaveEEPROM = true;
+			}
+			return;
+
+		case MENU_ARDF_AF_GAIN:
+
+			if ( gARDFAFGainOffset != gSubMenuSelection )
+			{
+				// value updated
+				gARDFAFGainOffset = gSubMenuSelection;
+
+				ARDF_ApplyAFGain(); // hear the change immediately while adjusting
 
 				gARDFRequestSaveEEPROM = true;
 			}
@@ -1283,6 +1304,10 @@ void MENU_ShowCurrentSetting(void)
 
 		case MENU_ARDF_CYCLE_END_BEEP:
 			gSubMenuSelection = gARDFCycleEndBeep_s;
+			break;
+
+		case MENU_ARDF_AF_GAIN:
+			gSubMenuSelection = gARDFAFGainOffset;
 			break;
 
 		case MENU_ARDF_CLOCK_CORR:

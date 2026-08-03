@@ -32,6 +32,7 @@ void ARDF_DFSimpleBackup(void)
     gARDFDFSimpleBackup.gain_remember = gARDFGainRemember;
     gARDFDFSimpleBackup.dual_watch    = gEeprom.DUAL_WATCH;
     gARDFDFSimpleBackup.cross_band    = gEeprom.CROSS_BAND_RX_TX;
+    gARDFDFSimpleBackup.af_gain_offset = gARDFAFGainOffset;
 }
 
 void ARDF_DFSimpleRestore(void)
@@ -59,6 +60,7 @@ void ARDF_DFSimpleRestore(void)
     gARDFGainRemember                      = gARDFDFSimpleBackup.gain_remember;
     gEeprom.DUAL_WATCH                     = gARDFDFSimpleBackup.dual_watch;
     gEeprom.CROSS_BAND_RX_TX               = gARDFDFSimpleBackup.cross_band;
+    gARDFAFGainOffset                      = gARDFDFSimpleBackup.af_gain_offset;
 
     gARDFDFSimpleBackup.valid = false;
 }
@@ -77,6 +79,7 @@ uint32_t ARDF_DFSimpleBackupPack(const t_ardf_df_simple_backup *backup)
     raw |= ((uint32_t)backup->gain_remember     & 0x03u) << 20;
     raw |= ((uint32_t)backup->dual_watch        & 0x03u) << 22;
     raw |= ((uint32_t)backup->cross_band        & 0x03u) << 24;
+    raw |= ((uint32_t)backup->af_gain_offset    & 0x0Fu) << 26; // 4-bit two's complement, -8..7
 
     return raw;
 }
@@ -120,6 +123,11 @@ void ARDF_DFSimpleBackupUnpack(uint32_t raw, t_ardf_df_simple_backup *backup)
     backup->cross_band    = (raw >> 24) & 0x03u;
     if ( backup->cross_band > CROSS_BAND_CHAN_B )
         backup->cross_band = CROSS_BAND_OFF;
+
+    // 4-bit two's complement -> int8_t; every 4-bit pattern maps to a value
+    // in -8..7, which is exactly ARDF_AF_GAIN_OFFSET_MIN..MAX, so no clamp needed.
+    uint8_t af_gain_raw    = (raw >> 26) & 0x0Fu;
+    backup->af_gain_offset = (af_gain_raw >= 8) ? (int8_t)(af_gain_raw - 16) : (int8_t)af_gain_raw;
 }
 
 #endif

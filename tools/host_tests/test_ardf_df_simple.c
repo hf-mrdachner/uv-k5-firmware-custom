@@ -24,6 +24,7 @@
 EEPROM_Config_t gEeprom;
 uint8_t gARDFNumFoxes;
 uint8_t gARDFGainRemember;
+int8_t gARDFAFGainOffset;
 
 static int failures = 0;
 
@@ -51,6 +52,7 @@ static void test_pack_unpack_round_trip_max_values(void)
         .gain_remember = 3,
         .dual_watch    = DUAL_WATCH_CHAN_B,
         .cross_band    = CROSS_BAND_CHAN_B,
+        .af_gain_offset = 7, // ARDF_AF_GAIN_OFFSET_MAX
     };
 
     uint32_t raw = ARDF_DFSimpleBackupPack(&in);
@@ -68,6 +70,25 @@ static void test_pack_unpack_round_trip_max_values(void)
     CHECK(out.gain_remember == in.gain_remember);
     CHECK(out.dual_watch    == in.dual_watch);
     CHECK(out.cross_band    == in.cross_band);
+    CHECK(out.af_gain_offset == in.af_gain_offset);
+}
+
+// af_gain_offset is packed as a 4-bit two's complement value -- round-trip its
+// negative boundary separately since that is the one case the "max values"
+// test (all-positive) and the "zero values" test don't exercise.
+static void test_pack_unpack_round_trip_min_af_gain_offset(void)
+{
+    t_ardf_df_simple_backup in = {0};
+    in.modulation    = MODULATION_FM;
+    in.bandwidth     = BANDWIDTH_WIDE;
+    in.step_setting  = STEP_2_5kHz;
+    in.af_gain_offset = -8; // ARDF_AF_GAIN_OFFSET_MIN
+
+    uint32_t raw = ARDF_DFSimpleBackupPack(&in);
+    t_ardf_df_simple_backup out;
+    ARDF_DFSimpleBackupUnpack(raw, &out);
+
+    CHECK(out.af_gain_offset == -8);
 }
 
 static void test_pack_unpack_round_trip_zero_values(void)
@@ -160,7 +181,7 @@ static void test_unpack_all_ones_is_fully_in_range(void)
     CHECK(out.cross_band   <= CROSS_BAND_CHAN_B);
 }
 
-// ARDF_DFSimpleBackup() must snapshot the 8 live values off the VFO the menu
+// ARDF_DFSimpleBackup() must snapshot the 9 live values off the VFO the menu
 // operates on (gEeprom.TX_VFO / gTxVfo -- the one DF Simple overrides), NOT
 // gEeprom.RX_VFO, which can be a different VFO when cross band is on and dual
 // watch is off (see RADIO_SelectVfos). RX_VFO is deliberately set to the other
@@ -178,6 +199,7 @@ static void test_backup_captures_active_vfo_and_globals(void)
     gEeprom.VfoInfo[1].STEP_SETTING = STEP_12_5kHz;
     gARDFNumFoxes = 5;
     gARDFGainRemember = 1;
+    gARDFAFGainOffset = -3;
 
     gARDFDFSimpleBackup = (t_ardf_df_simple_backup){0};
     ARDF_DFSimpleBackup();
@@ -192,9 +214,10 @@ static void test_backup_captures_active_vfo_and_globals(void)
     CHECK(gARDFDFSimpleBackup.gain_remember == 1);
     CHECK(gARDFDFSimpleBackup.dual_watch == DUAL_WATCH_CHAN_A);
     CHECK(gARDFDFSimpleBackup.cross_band == CROSS_BAND_CHAN_A);
+    CHECK(gARDFDFSimpleBackup.af_gain_offset == -3);
 }
 
-// ARDF_DFSimpleRestore() must write the 8 values back onto the VFO index
+// ARDF_DFSimpleRestore() must write the 9 values back onto the VFO index
 // recorded in the backup -- NOT necessarily the currently active VFO, since
 // the user may have switched VFOs while DF-Simple was active -- and then
 // invalidate the backup so a second restore is a no-op.
@@ -212,6 +235,7 @@ static void test_restore_targets_backed_up_vfo_not_current_one(void)
         .gain_remember = 1,
         .dual_watch    = DUAL_WATCH_CHAN_A,
         .cross_band    = CROSS_BAND_OFF,
+        .af_gain_offset = -5,
     };
 
     // simulate: user switched to VFO 1 and DF-Simple's fixed values are live there
@@ -222,6 +246,7 @@ static void test_restore_targets_backed_up_vfo_not_current_one(void)
     gEeprom.SQUELCH_LEVEL = 0;
     gARDFNumFoxes = 0;
     gARDFGainRemember = 0;
+    gARDFAFGainOffset = 0;
     gEeprom.DUAL_WATCH = DUAL_WATCH_OFF;
     gEeprom.CROSS_BAND_RX_TX = CROSS_BAND_OFF;
 
@@ -235,6 +260,7 @@ static void test_restore_targets_backed_up_vfo_not_current_one(void)
     CHECK(gARDFGainRemember == 1);
     CHECK(gEeprom.DUAL_WATCH == DUAL_WATCH_CHAN_A);
     CHECK(gEeprom.CROSS_BAND_RX_TX == CROSS_BAND_OFF);
+    CHECK(gARDFAFGainOffset == -5);
 
     // VFO 1 (still active) must be untouched by the restore
     CHECK(gEeprom.VfoInfo[1].Modulation == MODULATION_AM);
@@ -259,6 +285,7 @@ int main(void)
 {
     test_pack_unpack_round_trip_max_values();
     test_pack_unpack_round_trip_zero_values();
+    test_pack_unpack_round_trip_min_af_gain_offset();
     test_unpack_all_ones_sets_valid_true();
     test_unpack_clamps_out_of_range_values();
     test_unpack_all_ones_is_fully_in_range();

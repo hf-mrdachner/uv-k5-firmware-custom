@@ -61,6 +61,7 @@ const t_menu_item MenuList[] =
         {"TiRst",  VOICE_ID_INVALID,                       MENU_ARDF_TIME_RESET },
         {"GainRe", VOICE_ID_INVALID,                       MENU_ARDF_GAIN_REMEMBER },
         {"EndSig", VOICE_ID_INVALID,                       MENU_ARDF_CYCLE_END_BEEP },
+        {"AFGain", VOICE_ID_INVALID,                       MENU_ARDF_AF_GAIN },
         {"ClkCor", VOICE_ID_INVALID,                       MENU_ARDF_CLOCK_CORR },
         // fixme: disable mistuning
         //{"MstFrq", VOICE_ID_INVALID,                       MENU_ARDF_MIST_FREQ },
@@ -654,6 +655,10 @@ void UI_DisplayMenu(void)
 				sprintf(String, "%d s\nHeadphone:\nUse Filter", gSubMenuSelection);
 			else
 				sprintf(String, "off");
+			break;
+
+		case MENU_ARDF_AF_GAIN:
+			sprintf(String, "%+ddB", gSubMenuSelection * 2);
 			break;
 
 		case MENU_ARDF_CLOCK_CORR:

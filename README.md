@@ -212,6 +212,8 @@ Modify with UP/DOWN key in 0.1s steps or enter value as *5 digit number* in 1/10
 
 - Unscrew antenna and add a directional antenna with good front/back ratio.
 - Select a medium volume and try not to change it. Volume adjustment should be done with gain control (UP/DOWN keys).
+Alternatively, turn the volume knob fully clockwise to its mechanical end stop (the one position you can find by feel,
+without looking) and use the menu "AFGain" setting instead (details below) -- that is fully reproducible between hunts.
 - Listen for foxes, synchronize fox number and timer in menu with "ActFox" and "TiRst" options (details below).
 - Start hunting foxes and have fun!
 
@@ -254,6 +256,22 @@ different gains in different time slots.)
 You can quickly switch between both VFOs by long pressing "2 (A/B)" or a configured function key (see below).
 
 If gain remember is not activated on the actual VFO or "no timing" is selected (NumFox=0), no gain index history is shown in the lower part of the screen.
+
+
+#### Digital AF Gain (AFGain) ####
+The volume/power knob is a plain analog potentiometer -- the firmware never reads its position, so there is
+no way to reproduce an exact volume by eye. Turning it all the way clockwise, however, gives a mechanical end
+stop you can find purely by feel, without looking at the radio. Menu "AFGain" adds a digital loudness control
+*before* that knob (BK4819 AF DAC gain, ~2dB/step, range -8 .. +7, i.e. roughly -16dB .. +14dB around the
+factory-calibrated middle), so once the knob is fixed at its end stop, this menu setting becomes the fully
+reproducible way to set your listening volume from hunt to hunt.
+
+This is independent of the manual gain control (UP/DOWN keys) described above: "AFGain" only affects how loud
+the receiver sounds, it has no effect on RF sensitivity, RSSI, or the direction-finding measurement itself.
+
+"DF Simple" forces "AFGain" to 0dB (factory-calibrated loudness) while active and restores your previous value
+when switched off again, the same way it handles squelch, modulation, bandwidth and the other settings listed
+above.
 
 
 #### Clock Correction ####

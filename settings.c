@@ -245,12 +245,21 @@ void SETTINGS_InitEEPROM(void)
 	if ( Data[1] != 0xFF )
 	{
 		gARDFMistuneAddGainIdxSteps = Data[1];
+		gARDFAFGainOffset = (int8_t)Data[2]; // Data[2] was 'free', now AFGainOffset; both bytes are always saved together, so Data[1] also gates this one
 	}
 	else
 	{
 		// eeprom empty. use defaults
 		gARDFMistuneAddGainIdxSteps = ARDF_GAIN_INDEX_ADD_STEPS_MISTUNE_DEFAULT;
 		gARDFMistuneFreqRaw = ARDF_GAIN_MISTUNE_HZ_DEFAULT/ARDF_MISTUNE_RES_HZ;
+		gARDFAFGainOffset = ARDF_DEFAULT_AF_GAIN_OFFSET;
+	}
+
+	if ( (gARDFAFGainOffset < ARDF_AF_GAIN_OFFSET_MIN) || (gARDFAFGainOffset > ARDF_AF_GAIN_OFFSET_MAX) )
+	{
+		// out of range: either a corrupt EEPROM, or firmware upgraded from a
+		// version where this byte held the old 'free' magic marker (0x23)
+		gARDFAFGainOffset = ARDF_DEFAULT_AF_GAIN_OFFSET;
 	}
 
 // fixme: disable Mistune
@@ -555,7 +564,7 @@ void SETTINGS_SaveARDF(void)
 		struct {
 			int8_t   MistuneFreqRaw;
 			uint8_t  MistuneAddGainIdxSteps;
-			uint8_t  free;
+			int8_t   AFGainOffset;   // was 'free' (written 0x23, never read back)
 			uint8_t  free2;
 			uint32_t FoxDuration;
 		};
@@ -587,7 +596,7 @@ void SETTINGS_SaveARDF(void)
 
 	ARDFCfg.MistuneFreqRaw = gARDFMistuneFreqRaw;
 	ARDFCfg.MistuneAddGainIdxSteps = gARDFMistuneAddGainIdxSteps;
-	ARDFCfg.free = 0x23;
+	ARDFCfg.AFGainOffset = gARDFAFGainOffset;
 	ARDFCfg.free2 = 0x42;
 	ARDFCfg.FoxDuration = gARDFFoxDuration10ms;
 

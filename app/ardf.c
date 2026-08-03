@@ -96,6 +96,7 @@ bool              gARDFRequestSaveEEPROM = false;
 int16_t           gARDFClockCorrAddTicksPerMin = ARDF_CLOCK_CORR_TICKS_PER_MIN;
 int8_t            gARDFMistuneFreqRaw = ARDF_GAIN_MISTUNE_HZ_DEFAULT/ARDF_MISTUNE_RES_HZ;
 uint8_t           gARDFMistuneAddGainIdxSteps = ARDF_GAIN_INDEX_ADD_STEPS_MISTUNE_DEFAULT;
+int8_t            gARDFAFGainOffset = ARDF_DEFAULT_AF_GAIN_OFFSET;
 #ifdef ARDF_ENABLE_SHOW_DEBUG_DATA
 int16_t           gARDFdebug = 0;
 int16_t           gARDFdebug2 = 0;
@@ -420,6 +421,24 @@ int32_t ARDF_GetRestTime_s(void)
 int8_t ARDF_Get_GainDiff(void)
 {
    return ARDF_ORIG_GAIN_DB - ardf_gain_table[ ARDF_Get_GainIndex(gEeprom.RX_VFO) ].gain_dB;
+}
+
+
+
+void ARDF_ApplyAFGain(void)
+{
+   int16_t dac_gain = (int16_t)gEeprom.DAC_GAIN + gARDFAFGainOffset;
+
+   if ( dac_gain < 0 )
+      dac_gain = 0;
+   else if ( dac_gain > 15 )
+      dac_gain = 15;
+
+   BK4819_WriteRegister(BK4819_REG_48,
+      (11u << 12)                |     // ??? .. 0 ~ 15, doesn't seem to make any difference
+      ( 0u << 10)                |     // AF Rx Gain-1
+      (gEeprom.VOLUME_GAIN << 4) |     // AF Rx Gain-2
+      ((uint16_t)dac_gain  << 0));     // AF DAC Gain, gARDFAFGainOffset applied on top of calibration
 }
 
 
