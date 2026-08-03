@@ -198,7 +198,12 @@ static void SendVersion(void)
 
 	Reply.Header.ID = 0x0515;
 	Reply.Header.Size = sizeof(Reply.Data);
-	strcpy(Reply.Data.Version, Version);
+	// Version (version.c) is AUTHOR_STRING + " " + VERSION_STRING, both
+	// Makefile-configurable -- length not guaranteed to fit this fixed
+	// char[16]. strncpy + explicit terminator truncates safely instead of
+	// overflowing into bHasCustomAesKey/Challenge below.
+	strncpy(Reply.Data.Version, Version, sizeof(Reply.Data.Version) - 1);
+	Reply.Data.Version[sizeof(Reply.Data.Version) - 1] = '\0';
 	Reply.Data.bHasCustomAesKey = bHasCustomAesKey;
 	Reply.Data.bIsInLockScreen = bIsInLockScreen;
 	Reply.Data.Challenge[0] = gChallenge[0];

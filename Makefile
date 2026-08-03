@@ -212,13 +212,21 @@ endif
 OBJCOPY = arm-none-eabi-objcopy
 SIZE = arm-none-eabi-size
 
-AUTHOR_STRING ?= ARDF
+AUTHOR_STRING ?= Phononic
 # the user might not have/want git installed
-# can set own version string here (max 7 chars)
+# can set own version string here. Reply.Data.Version (app/uart.c) is a
+# fixed char[16] and the copy into it is now length-safe (truncates rather
+# than overflowing), but anything beyond 16 chars total (AUTHOR_STRING + " "
+# + VERSION_STRING) gets silently cut off in the UART/PC-tool-visible
+# version string -- keep the combination under that if it should stay whole.
 ifneq (, $(shell $(WHERE) git))
 	VERSION_STRING ?= $(shell git describe --tags --exact-match 2>$(NULL_OUTPUT))
 	ifeq (, $(VERSION_STRING))
-    	VERSION_STRING := $(shell git rev-parse --short HEAD)
+		# --short=6, not the default 7: AUTHOR_STRING + " " + a 7-char hash
+		# is 16 chars for "Phononic", one too many to null-terminate in
+		# Reply.Data.Version's fixed char[16] (app/uart.c) without truncating
+		# the last hex digit.
+    	VERSION_STRING := $(shell git rev-parse --short=6 HEAD)
 	endif
 	VERSION_STRING := $(shell echo $(VERSION_STRING) | sed "s/^ARDF-//")
 endif
