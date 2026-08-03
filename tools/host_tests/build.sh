@@ -28,6 +28,11 @@ mkdir -p "$OUT"
 # firmware that actually ships (this exact class of drift caused three
 # rounds of "verified clean in host tests, broken on hardware" earlier in
 # this project).
+#
+# Exception: ENABLE_DE_HAM_BANDS / ENABLE_DE_EXTRA_BANDS are deliberately NOT
+# added here even though the Makefile can define them -- this script only
+# covers the default (both-off) config; the other three combinations are
+# covered by build_band_list_de.sh instead. Do not "fix" that omission.
 CFLAGS="-I. -DPRINTF_INCLUDE_CONFIG_H -DENABLE_SPECTRUM -DENABLE_SCAN_RANGES -DSPECTRUM_AUTOMATIC_SQUELCH -DENABLE_AM_FIX -Wall -Wextra -fsanitize=address -g"
 
 gcc $CFLAGS -c font.c -o "$OUT/font.o"

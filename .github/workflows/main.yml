@@ -28,6 +28,9 @@ jobs:
       - name: Run host-side ARDF DF-Simple tests
         run:  ./tools/host_tests/build_ardf_df_simple.sh
 
+      - name: Run host-side German band-list tests
+        run:  ./tools/host_tests/build_band_list_de.sh
+
   build:
     runs-on: ubuntu-22.04
     container:
