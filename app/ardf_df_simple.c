@@ -79,7 +79,7 @@ uint32_t ARDF_DFSimpleBackupPack(const t_ardf_df_simple_backup *backup)
     raw |= ((uint32_t)backup->gain_remember     & 0x03u) << 20;
     raw |= ((uint32_t)backup->dual_watch        & 0x03u) << 22;
     raw |= ((uint32_t)backup->cross_band        & 0x03u) << 24;
-    raw |= ((uint32_t)backup->af_gain_offset    & 0x0Fu) << 26; // 4-bit two's complement, -8..7
+    raw |= ((uint32_t)backup->af_gain_offset    & 0x1Fu) << 26; // 5-bit two's complement, -16..15
 
     return raw;
 }
@@ -124,10 +124,19 @@ void ARDF_DFSimpleBackupUnpack(uint32_t raw, t_ardf_df_simple_backup *backup)
     if ( backup->cross_band > CROSS_BAND_CHAN_B )
         backup->cross_band = CROSS_BAND_OFF;
 
-    // 4-bit two's complement -> int8_t; every 4-bit pattern maps to a value
-    // in -8..7, which is exactly ARDF_AF_GAIN_OFFSET_MIN..MAX, so no clamp needed.
-    uint8_t af_gain_raw    = (raw >> 26) & 0x0Fu;
-    backup->af_gain_offset = (af_gain_raw >= 8) ? (int8_t)(af_gain_raw - 16) : (int8_t)af_gain_raw;
+    // 5-bit two's complement -> int8_t, covering -16..15. Wide enough for any
+    // offset ARDF_AFGainOffsetMin()/Max() can produce for any calibrated
+    // DAC_GAIN (0..15) -- that range is always exactly 16 values wide, just
+    // shifted per calibration -- so every bit pattern decodes to a plain
+    // valid int8_t, no clamp needed (same reasoning as bandwidth/gain_remember
+    // above). ARDF_ApplyAFGain()'s own clamp is what keeps the *hardware*
+    // register safe regardless of what value ends up in gARDFAFGainOffset.
+    // Firmware predating this field always wrote 0 into these bits (pack()
+    // zero-initializes `raw` and only old fields set their own bits), so
+    // upgrading from older firmware decodes this as offset 0, matching
+    // ARDF_DEFAULT_AF_GAIN_OFFSET.
+    uint8_t af_gain_raw    = (raw >> 26) & 0x1Fu;
+    backup->af_gain_offset = (af_gain_raw >= 16) ? (int8_t)(af_gain_raw - 32) : (int8_t)af_gain_raw;
 }
 
 #endif

@@ -52,7 +52,7 @@ static void test_pack_unpack_round_trip_max_values(void)
         .gain_remember = 3,
         .dual_watch    = DUAL_WATCH_CHAN_B,
         .cross_band    = CROSS_BAND_CHAN_B,
-        .af_gain_offset = 7, // ARDF_AF_GAIN_OFFSET_MAX
+        .af_gain_offset = 15, // max value the 5-bit two's complement field can carry
     };
 
     uint32_t raw = ARDF_DFSimpleBackupPack(&in);
@@ -73,7 +73,7 @@ static void test_pack_unpack_round_trip_max_values(void)
     CHECK(out.af_gain_offset == in.af_gain_offset);
 }
 
-// af_gain_offset is packed as a 4-bit two's complement value -- round-trip its
+// af_gain_offset is packed as a 5-bit two's complement value -- round-trip its
 // negative boundary separately since that is the one case the "max values"
 // test (all-positive) and the "zero values" test don't exercise.
 static void test_pack_unpack_round_trip_min_af_gain_offset(void)
@@ -82,13 +82,13 @@ static void test_pack_unpack_round_trip_min_af_gain_offset(void)
     in.modulation    = MODULATION_FM;
     in.bandwidth     = BANDWIDTH_WIDE;
     in.step_setting  = STEP_2_5kHz;
-    in.af_gain_offset = -8; // ARDF_AF_GAIN_OFFSET_MIN
+    in.af_gain_offset = -16; // min value the 5-bit two's complement field can carry
 
     uint32_t raw = ARDF_DFSimpleBackupPack(&in);
     t_ardf_df_simple_backup out;
     ARDF_DFSimpleBackupUnpack(raw, &out);
 
-    CHECK(out.af_gain_offset == -8);
+    CHECK(out.af_gain_offset == -16);
 }
 
 static void test_pack_unpack_round_trip_zero_values(void)

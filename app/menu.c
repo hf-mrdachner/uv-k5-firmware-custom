@@ -44,6 +44,7 @@
 
 #ifdef ENABLE_ARDF
 #include "app/ardf.h"
+#include "app/ardf_af_gain.h"
 #include "app/ardf_df_simple.h"
 #endif
 
@@ -238,8 +239,8 @@ int MENU_GetLimits(uint8_t menu_id, int32_t *pMin, int32_t *pMax)
 			break;
 
 		case MENU_ARDF_AF_GAIN:
-			*pMin = ARDF_AF_GAIN_OFFSET_MIN;
-			*pMax = ARDF_AF_GAIN_OFFSET_MAX;
+			*pMin = ARDF_AFGainOffsetMin(gEeprom.DAC_GAIN);
+			*pMax = ARDF_AFGainOffsetMax(gEeprom.DAC_GAIN);
 			break;
 
 		case MENU_ARDF_MIST_FREQ:

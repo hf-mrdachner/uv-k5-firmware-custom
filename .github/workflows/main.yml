@@ -28,6 +28,9 @@ jobs:
       - name: Run host-side ARDF DF-Simple tests
         run:  ./tools/host_tests/build_ardf_df_simple.sh
 
+      - name: Run host-side ARDF AF-gain tests
+        run:  ./tools/host_tests/build_ardf_af_gain.sh
+
       - name: Run host-side German band-list tests
         run:  ./tools/host_tests/build_band_list_de.sh
 

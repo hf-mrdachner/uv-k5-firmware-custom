@@ -30,6 +30,7 @@
 
 #ifdef ENABLE_ARDF
 #include "app/ardf.h"
+#include "app/ardf_af_gain.h"
 #include "app/ardf_df_simple.h"
 #endif
 
@@ -255,12 +256,9 @@ void SETTINGS_InitEEPROM(void)
 		gARDFAFGainOffset = ARDF_DEFAULT_AF_GAIN_OFFSET;
 	}
 
-	if ( (gARDFAFGainOffset < ARDF_AF_GAIN_OFFSET_MIN) || (gARDFAFGainOffset > ARDF_AF_GAIN_OFFSET_MAX) )
-	{
-		// out of range: either a corrupt EEPROM, or firmware upgraded from a
-		// version where this byte held the old 'free' magic marker (0x23)
-		gARDFAFGainOffset = ARDF_DEFAULT_AF_GAIN_OFFSET;
-	}
+	// gARDFAFGainOffset's valid range depends on gEeprom.DAC_GAIN, which this
+	// function only loads later (see the calibration block below) -- so its
+	// range clamp lives there too, right after DAC_GAIN becomes known.
 
 // fixme: disable Mistune
 gARDFMistuneAddGainIdxSteps = 0;
@@ -438,6 +436,17 @@ void SETTINGS_LoadCalibration(void)
 		gEEPROM_1F8C                 = Misc.EEPROM_1F8C & 0x01FF;
 		gEeprom.VOLUME_GAIN          = (Misc.VOLUME_GAIN < 64) ? Misc.VOLUME_GAIN : 58;
 		gEeprom.DAC_GAIN             = (Misc.DAC_GAIN    < 16) ? Misc.DAC_GAIN    : 8;
+
+#ifdef ENABLE_ARDF
+		if ( (gARDFAFGainOffset < ARDF_AFGainOffsetMin(gEeprom.DAC_GAIN))
+		     || (gARDFAFGainOffset > ARDF_AFGainOffsetMax(gEeprom.DAC_GAIN)) )
+		{
+			// out of range for this radio's actual DAC_GAIN calibration:
+			// either a corrupt EEPROM, or firmware upgraded from a version
+			// where this byte held the old 'free' magic marker (0x23)
+			gARDFAFGainOffset = ARDF_DEFAULT_AF_GAIN_OFFSET;
+		}
+#endif
 
 		BK4819_WriteRegister(BK4819_REG_3B, 22656 + gEeprom.BK4819_XTAL_FREQ_LOW);
 //		BK4819_WriteRegister(BK4819_REG_3C, gEeprom.BK4819_XTAL_FREQ_HIGH);

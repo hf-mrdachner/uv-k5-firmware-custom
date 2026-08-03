@@ -45,12 +45,11 @@
 
 // offset added onto gEeprom.DAC_GAIN (0..15, ~2dB/step) so loudness can be
 // dialed in purely digitally, with the physical volume knob left at a fixed,
-// reproducible position (e.g. fully clockwise). Range matches the 4-bit
-// two's complement encoding used for its DF-Simple backup (see
-// app/ardf_df_simple.c), and spans the full 0..15 DAC_GAIN range around the
-// typical factory-calibrated middle value of 8.
-#define ARDF_AF_GAIN_OFFSET_MIN (-8)
-#define ARDF_AF_GAIN_OFFSET_MAX 7
+// reproducible position (e.g. fully clockwise). gEeprom.DAC_GAIN is itself a
+// per-radio factory calibration value (not a fixed constant), so the usable
+// offset range depends on it -- see ARDF_AFGainOffsetMin()/Max() in
+// app/ardf_af_gain.h, which always span exactly 16 values (0.. 15 minus
+// whatever the calibration already used), just shifted per unit.
 #define ARDF_DEFAULT_AF_GAIN_OFFSET 0
 
 //#define ARDF_ENABLE_SHOW_DEBUG_DATA

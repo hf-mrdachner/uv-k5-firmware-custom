@@ -17,6 +17,7 @@
 #ifdef ENABLE_ARDF
 
 #include "app/ardf.h"
+#include "app/ardf_af_gain.h"
 #include "driver/bk4819.h"
 #include "driver/system.h"
 #include "audio.h"
@@ -427,18 +428,7 @@ int8_t ARDF_Get_GainDiff(void)
 
 void ARDF_ApplyAFGain(void)
 {
-   int16_t dac_gain = (int16_t)gEeprom.DAC_GAIN + gARDFAFGainOffset;
-
-   if ( dac_gain < 0 )
-      dac_gain = 0;
-   else if ( dac_gain > 15 )
-      dac_gain = 15;
-
-   BK4819_WriteRegister(BK4819_REG_48,
-      (11u << 12)                |     // ??? .. 0 ~ 15, doesn't seem to make any difference
-      ( 0u << 10)                |     // AF Rx Gain-1
-      (gEeprom.VOLUME_GAIN << 4) |     // AF Rx Gain-2
-      ((uint16_t)dac_gain  << 0));     // AF DAC Gain, gARDFAFGainOffset applied on top of calibration
+   BK4819_SetAFGain(gEeprom.VOLUME_GAIN, ARDF_ClampDacGain(gEeprom.DAC_GAIN, gARDFAFGainOffset));
 }
 
 
