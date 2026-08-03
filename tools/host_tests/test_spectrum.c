@@ -543,6 +543,27 @@ static const char *FindMatchingPresetName(uint32_t f) {
     }
     return NULL;
 }
+
+// Like CHECK(strcmp(FindMatchingPresetName(freq), expected) == 0), but
+// guards against FindMatchingPresetName() returning NULL: a plain strcmp()
+// would segfault the whole test binary in that case instead of reporting a
+// clean FAIL, silently skipping every later check in the same run -- exactly
+// the kind of regression this test file exists to catch. Only use this for
+// "should match name X" assertions; the existing
+// CHECK(FindMatchingPresetName(f) == NULL) calls for "should be absent"
+// assertions don't need it.
+#define CHECK_NAME(freq, expected) do { \
+    const char *_name = FindMatchingPresetName(freq); \
+    if (_name == NULL) { \
+        printf("FAIL %s:%d: FindMatchingPresetName(%lu) returned NULL, expected \"%s\"\n", __FILE__, __LINE__, (unsigned long)(freq), expected); \
+        failures++; \
+    } else if (strcmp(_name, expected) != 0) { \
+        printf("FAIL %s:%d: FindMatchingPresetName(%lu) == \"%s\", expected \"%s\"\n", __FILE__, __LINE__, (unsigned long)(freq), _name, expected); \
+        failures++; \
+    } else { \
+        printf("ok   FindMatchingPresetName(%lu) == \"%s\"\n", (unsigned long)(freq), expected); \
+    } \
+} while (0)
 #endif
 
 #ifdef ENABLE_DE_HAM_BANDS
@@ -550,10 +571,16 @@ static void test_de_ham_bands(void) {
     printf("\n-- test_de_ham_bands --\n");
 
     // 17mHam: new entry, absent from the international table.
-    CHECK(strcmp(FindMatchingPresetName(1810000), "17mHam") == 0); // 18.10 MHz
+    CHECK_NAME(1810000, "17mHam"); // 18.10 MHz
 
     // 70cmHam: new entry, the original point of this feature.
-    CHECK(strcmp(FindMatchingPresetName(43550000), "70cmHam") == 0); // 435.50 MHz, outside LPD433's slice
+    CHECK_NAME(43550000, "70cmHam"); // 435.50 MHz, outside LPD433's slice
+
+    // 70cmHam boundary: range is 43000000-44000000.
+    CHECK_NAME(43000000, "70cmHam"); // in: exact fStart
+    CHECK_NAME(44000000, "70cmHam"); // in: exact fEnd
+    CHECK(FindMatchingPresetName(42999999) == NULL); // out: one below fStart
+    CHECK(FindMatchingPresetName(44000001) == NULL); // out: one above fEnd
 
     // 2mHam narrowed to the German 144-146 MHz allocation (was 144-148).
     CHECK(FindMatchingPresetName(14700000) == NULL); // 147.0 MHz, inside the old int'l range, outside the new German one
@@ -564,9 +591,9 @@ static void test_de_ham_bands(void) {
     // LPD/LPD433 must win over 70cmHam inside LPD's slice (documented
     // ordering exception -- see Task 2's array comment).
 #ifdef ENABLE_DE_EXTRA_BANDS
-    CHECK(strcmp(FindMatchingPresetName(43350000), "LPD433") == 0); // 433.50 MHz
+    CHECK_NAME(43350000, "LPD433"); // 433.50 MHz
 #else
-    CHECK(strcmp(FindMatchingPresetName(43350000), "LPD") == 0);
+    CHECK_NAME(43350000, "LPD");
 #endif
 }
 #endif
@@ -576,16 +603,40 @@ static void test_de_extra_bands(void) {
     printf("\n-- test_de_extra_bands --\n");
 
     // CB widened to the full German 80-channel allocation (26.565-27.405 MHz).
-    CHECK(strcmp(FindMatchingPresetName(2660000), "CB") == 0); // 26.60 MHz -- inside new CB, outside old (26.975-28.00)
+    CHECK_NAME(2660000, "CB"); // 26.60 MHz -- inside new CB, outside old (26.975-28.00)
+
+    // CB boundary: range is 2656500-2740500.
+    CHECK_NAME(2656500, "CB"); // in: exact fStart
+    CHECK_NAME(2740500, "CB"); // in: exact fEnd
+    CHECK(FindMatchingPresetName(2656499) == NULL); // out: one below fStart
+    CHECK(FindMatchingPresetName(2740501) == NULL); // out: one above fEnd
 
     // AirBand renamed "Flugfunk" and widened to the ICAO edges (117.975-137.000 MHz).
-    CHECK(strcmp(FindMatchingPresetName(11798000), "Flugfunk") == 0); // 117.98 MHz -- inside new, outside old (118.00-135.00)
+    CHECK_NAME(11798000, "Flugfunk"); // 117.98 MHz -- inside new, outside old (118.00-135.00)
+
+    // Flugfunk boundary: range is 11797500-13700000.
+    CHECK_NAME(11797500, "Flugfunk"); // in: exact fStart
+    CHECK_NAME(13700000, "Flugfunk"); // in: exact fEnd
+    CHECK(FindMatchingPresetName(11797499) == NULL); // out: one below fStart
+    CHECK(FindMatchingPresetName(13700001) == NULL); // out: one above fEnd
 
     // Sea/River1/River2 consolidated into one "Seefunk" entry.
-    CHECK(strcmp(FindMatchingPresetName(15700000), "Seefunk") == 0); // 157.0 MHz
+    CHECK_NAME(15700000, "Seefunk"); // 157.0 MHz
+
+    // Seefunk boundary: range is 15600000-16202500.
+    CHECK_NAME(15600000, "Seefunk"); // in: exact fStart
+    CHECK_NAME(16202500, "Seefunk"); // in: exact fEnd
+    CHECK(FindMatchingPresetName(15599999) == NULL); // out: one below fStart
+    CHECK(FindMatchingPresetName(16202501) == NULL); // out: one above fEnd
 
     // PMR renamed "PMR446".
-    CHECK(strcmp(FindMatchingPresetName(44610000), "PMR446") == 0); // 446.10 MHz
+    CHECK_NAME(44610000, "PMR446"); // 446.10 MHz
+
+    // PMR446 boundary: range is 44600000-44620000.
+    CHECK_NAME(44600000, "PMR446"); // in: exact fStart
+    CHECK_NAME(44620000, "PMR446"); // in: exact fEnd
+    CHECK(FindMatchingPresetName(44599999) == NULL); // out: one below fStart
+    CHECK(FindMatchingPresetName(44620001) == NULL); // out: one above fEnd
 
     // Railway, Satcom, River1, River2, FRS 462/467, GSM-UP/DN dropped entirely.
     CHECK(FindMatchingPresetName(15300000) == NULL); // 153.0 MHz, old Railway range

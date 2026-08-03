@@ -139,7 +139,7 @@ typedef struct FreqPreset {
 // are bands a licensed operator may transmit on with this radio.
 //
 // ENABLE_DE_EXTRA_BANDS corrects/replaces the remaining entries (CB, PMR,
-// LPD, AirBand, Sea/River, LoRaWAN) and drops Railway/Satcom/River1/River2/
+// LPD, AirBand, Sea/River) and drops Railway/Satcom/River1/River2/
 // FRS/GSM (found factually wrong for Germany, or not practically useful --
 // see docs/superpowers/specs/2026-08-02-german-band-list-design.md). These
 // stay receive-only reference bands regardless of the flag: the UV-K5 isn't
