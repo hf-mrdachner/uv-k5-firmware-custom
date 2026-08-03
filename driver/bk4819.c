@@ -812,6 +812,15 @@ void BK4819_SetAF(BK4819_AF_Type_t AF)
 	BK4819_WriteRegister(BK4819_REG_47, (6u << 12) | (AF << 8) | (1u << 6));
 }
 
+void BK4819_SetAFGain(uint8_t volume_gain, uint8_t dac_gain)
+{
+	BK4819_WriteRegister(BK4819_REG_48,
+		(11u << 12)              |     // ??? .. 0 ~ 15, doesn't seem to make any difference
+		( 0u << 10)              |     // AF Rx Gain-1
+		((uint16_t)volume_gain << 4) | // AF Rx Gain-2
+		((uint16_t)dac_gain    << 0)); // AF DAC Gain (after Gain-1 and Gain-2)
+}
+
 void BK4819_SetRegValue(RegisterSpec s, uint16_t v) {
   uint16_t reg = BK4819_ReadRegister(s.num);
   reg &= ~(s.mask << s.offset);

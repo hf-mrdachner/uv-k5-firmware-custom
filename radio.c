@@ -532,6 +532,15 @@ void RADIO_SelectVfos(void)
 
 }
 
+void RADIO_ApplyAFGain(void)
+{
+#ifdef ENABLE_ARDF
+	ARDF_ApplyAFGain(); // AF Rx Gain-2/DAC Gain, gARDFAFGainOffset applied on top of calibration
+#else
+	BK4819_SetAFGain(gEeprom.VOLUME_GAIN, gEeprom.DAC_GAIN);
+#endif
+}
+
 void RADIO_SetupRegisters(bool switchToForeground)
 {
 	BK4819_FilterBandwidth_t Bandwidth = gRxVfo->CHANNEL_BANDWIDTH;
@@ -604,11 +613,7 @@ void RADIO_SetupRegisters(bool switchToForeground)
 
 	// AF RX Gain and DAC
 	//BK4819_WriteRegister(BK4819_REG_48, 0xB3A8);  // 1011 00 111010 1000
-	BK4819_WriteRegister(BK4819_REG_48,
-		(11u << 12)                 |     // ??? .. 0 ~ 15, doesn't seem to make any difference
-		( 0u << 10)                 |     // AF Rx Gain-1
-		(gEeprom.VOLUME_GAIN << 4) |     // AF Rx Gain-2
-		(gEeprom.DAC_GAIN    << 0));     // AF DAC Gain (after Gain-1 and Gain-2)
+	RADIO_ApplyAFGain();
 
 
 	uint16_t InterruptMask = BK4819_REG_3F_SQUELCH_FOUND | BK4819_REG_3F_SQUELCH_LOST;

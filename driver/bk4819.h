@@ -98,6 +98,7 @@ void     BK4819_SetupSquelch(
 			uint8_t SquelchOpenGlitchThresh);
 
 void     BK4819_SetAF(BK4819_AF_Type_t AF);
+void     BK4819_SetAFGain(uint8_t volume_gain, uint8_t dac_gain); // writes REG_48: AF Rx Gain-2 (0..63) and AF DAC Gain (0..15)
 void     BK4819_RX_TurnOn(void);
 void     BK4819_PickRXFilterPathBasedOnFrequency(uint32_t Frequency);
 void     BK4819_DisableScramble(void);

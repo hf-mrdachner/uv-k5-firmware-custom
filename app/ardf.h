@@ -43,6 +43,15 @@
 #define ARDF_DEFAULT_DF_SIMPLE false
 #define ARDF_CLOCK_CORR_TICKS_PER_MIN (+00) // default clock correction
 
+// offset added onto gEeprom.DAC_GAIN (0..15, ~2dB/step) so loudness can be
+// dialed in purely digitally, with the physical volume knob left at a fixed,
+// reproducible position (e.g. fully clockwise). gEeprom.DAC_GAIN is itself a
+// per-radio factory calibration value (not a fixed constant), so the usable
+// offset range depends on it -- see ARDF_AFGainOffsetMin()/Max() in
+// app/ardf_af_gain.h, which always span exactly 16 values (0.. 15 minus
+// whatever the calibration already used), just shifted per unit.
+#define ARDF_DEFAULT_AF_GAIN_OFFSET 0
+
 //#define ARDF_ENABLE_SHOW_DEBUG_DATA
 
 
@@ -75,6 +84,7 @@ extern bool                  gARDFRequestSaveEEPROM;
 extern int16_t               gARDFClockCorrAddTicksPerMin;
 extern int8_t                gARDFMistuneFreqRaw;
 extern uint8_t               gARDFMistuneAddGainIdxSteps;
+extern int8_t                gARDFAFGainOffset;
 #ifdef ARDF_ENABLE_SHOW_DEBUG_DATA
 extern int16_t               gARDFdebug;
 extern int16_t               gARDFdebug2;
@@ -95,6 +105,7 @@ extern int8_t ARDF_Get_GainDiff(void);
 extern void ARDF_DoMistuneFreq(void);
 extern void ARDF_UndoMistuneFreq(void);
 extern void ARDF_StopFreqMistune(void);
+extern void ARDF_ApplyAFGain(void);
 
 #endif
 

@@ -17,6 +17,7 @@
 #ifdef ENABLE_ARDF
 
 #include "app/ardf.h"
+#include "app/ardf_af_gain.h"
 #include "driver/bk4819.h"
 #include "driver/system.h"
 #include "audio.h"
@@ -96,6 +97,7 @@ bool              gARDFRequestSaveEEPROM = false;
 int16_t           gARDFClockCorrAddTicksPerMin = ARDF_CLOCK_CORR_TICKS_PER_MIN;
 int8_t            gARDFMistuneFreqRaw = ARDF_GAIN_MISTUNE_HZ_DEFAULT/ARDF_MISTUNE_RES_HZ;
 uint8_t           gARDFMistuneAddGainIdxSteps = ARDF_GAIN_INDEX_ADD_STEPS_MISTUNE_DEFAULT;
+int8_t            gARDFAFGainOffset = ARDF_DEFAULT_AF_GAIN_OFFSET;
 #ifdef ARDF_ENABLE_SHOW_DEBUG_DATA
 int16_t           gARDFdebug = 0;
 int16_t           gARDFdebug2 = 0;
@@ -420,6 +422,13 @@ int32_t ARDF_GetRestTime_s(void)
 int8_t ARDF_Get_GainDiff(void)
 {
    return ARDF_ORIG_GAIN_DB - ardf_gain_table[ ARDF_Get_GainIndex(gEeprom.RX_VFO) ].gain_dB;
+}
+
+
+
+void ARDF_ApplyAFGain(void)
+{
+   BK4819_SetAFGain(gEeprom.VOLUME_GAIN, ARDF_ClampDacGain(gEeprom.DAC_GAIN, gARDFAFGainOffset));
 }
 
 

@@ -158,6 +158,7 @@ void     RADIO_ConfigureSquelchAndOutputPower(VFO_Info_t *pInfo);
 void     RADIO_ApplyOffset(VFO_Info_t *pInfo);
 void     RADIO_SelectVfos(void);
 void     RADIO_SetupRegisters(bool switchToForeground);
+void     RADIO_ApplyAFGain(void); // AF Rx Gain-2 / DAC Gain, with the ARDF gain offset folded in when ENABLE_ARDF is compiled in
 #ifdef ENABLE_NOAA
 	void RADIO_ConfigureNOAA(void);
 #endif

@@ -30,6 +30,7 @@
 
 #ifdef ENABLE_ARDF
 #include "app/ardf.h"
+#include "app/ardf_af_gain.h"
 #include "app/ardf_df_simple.h"
 #endif
 
@@ -245,13 +246,19 @@ void SETTINGS_InitEEPROM(void)
 	if ( Data[1] != 0xFF )
 	{
 		gARDFMistuneAddGainIdxSteps = Data[1];
+		gARDFAFGainOffset = (int8_t)Data[2]; // Data[2] was 'free', now AFGainOffset; both bytes are always saved together, so Data[1] also gates this one
 	}
 	else
 	{
 		// eeprom empty. use defaults
 		gARDFMistuneAddGainIdxSteps = ARDF_GAIN_INDEX_ADD_STEPS_MISTUNE_DEFAULT;
 		gARDFMistuneFreqRaw = ARDF_GAIN_MISTUNE_HZ_DEFAULT/ARDF_MISTUNE_RES_HZ;
+		gARDFAFGainOffset = ARDF_DEFAULT_AF_GAIN_OFFSET;
 	}
+
+	// gARDFAFGainOffset's valid range depends on gEeprom.DAC_GAIN, which this
+	// function only loads later (see the calibration block below) -- so its
+	// range clamp lives there too, right after DAC_GAIN becomes known.
 
 // fixme: disable Mistune
 gARDFMistuneAddGainIdxSteps = 0;
@@ -430,6 +437,17 @@ void SETTINGS_LoadCalibration(void)
 		gEeprom.VOLUME_GAIN          = (Misc.VOLUME_GAIN < 64) ? Misc.VOLUME_GAIN : 58;
 		gEeprom.DAC_GAIN             = (Misc.DAC_GAIN    < 16) ? Misc.DAC_GAIN    : 8;
 
+#ifdef ENABLE_ARDF
+		if ( (gARDFAFGainOffset < ARDF_AFGainOffsetMin(gEeprom.DAC_GAIN))
+		     || (gARDFAFGainOffset > ARDF_AFGainOffsetMax(gEeprom.DAC_GAIN)) )
+		{
+			// out of range for this radio's actual DAC_GAIN calibration:
+			// either a corrupt EEPROM, or firmware upgraded from a version
+			// where this byte held the old 'free' magic marker (0x23)
+			gARDFAFGainOffset = ARDF_DEFAULT_AF_GAIN_OFFSET;
+		}
+#endif
+
 		BK4819_WriteRegister(BK4819_REG_3B, 22656 + gEeprom.BK4819_XTAL_FREQ_LOW);
 //		BK4819_WriteRegister(BK4819_REG_3C, gEeprom.BK4819_XTAL_FREQ_HIGH);
 	}
@@ -555,7 +573,7 @@ void SETTINGS_SaveARDF(void)
 		struct {
 			int8_t   MistuneFreqRaw;
 			uint8_t  MistuneAddGainIdxSteps;
-			uint8_t  free;
+			int8_t   AFGainOffset;   // was 'free' (written 0x23, never read back)
 			uint8_t  free2;
 			uint32_t FoxDuration;
 		};
@@ -587,7 +605,7 @@ void SETTINGS_SaveARDF(void)
 
 	ARDFCfg.MistuneFreqRaw = gARDFMistuneFreqRaw;
 	ARDFCfg.MistuneAddGainIdxSteps = gARDFMistuneAddGainIdxSteps;
-	ARDFCfg.free = 0x23;
+	ARDFCfg.AFGainOffset = gARDFAFGainOffset;
 	ARDFCfg.free2 = 0x42;
 	ARDFCfg.FoxDuration = gARDFFoxDuration10ms;
 
