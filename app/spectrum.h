@@ -123,7 +123,7 @@ typedef enum ScanStep {
 } ScanStep;
 
 typedef struct FreqPreset {
-  char name[8]; // max 7 chars + null; fits all BK4819-receivable band names
+  char name[12]; // max 11 chars + null
   uint32_t fStart;
   uint32_t fEnd;
   StepsCount stepsCountIndex;
@@ -133,30 +133,98 @@ typedef struct FreqPreset {
 } FreqPreset;
 
 // Presets below 18 MHz omitted: BK4819 hardware minimum is 18 MHz.
+//
+// ENABLE_DE_HAM_BANDS corrects the amateur-radio entries to the German
+// allocations (adds 17m/70cm, narrows 6m/2m to their German width) -- these
+// are bands a licensed operator may transmit on with this radio.
+//
+// ENABLE_DE_EXTRA_BANDS corrects/replaces the remaining entries (CB, PMR,
+// LPD, AirBand, Sea/River) and drops Railway/Satcom/River1/River2/
+// FRS/GSM (found factually wrong for Germany, or not practically useful --
+// see docs/superpowers/specs/2026-08-02-german-band-list-design.md). These
+// stay receive-only reference bands regardless of the flag: the UV-K5 isn't
+// a certified device for PMR446/CB even though those bands are license-free.
+//
+// Both flags default off; with both off this table is unchanged from
+// before either flag existed.
+//
+// ORDERING NOTE: LPD/LPD433 is placed before 70cmHam even though its
+// fStart (43307500) is higher than 70cmHam's (43000000) -- LPD sits
+// entirely inside the German 70cm ham band, and AutomaticPresetChoose()/
+// DrawStatus() match on "first array entry whose range contains the
+// frequency" (app/spectrum.c:777-783, 1449-1457), so LPD must come first
+// for a frequency in its slice to be labeled "LPD"/"LPD433" rather than
+// "70cmHam". This is the only place in the table where source order isn't
+// purely ascending by frequency -- SelectNearestPreset()'s KEY_3/KEY_9
+// next/prev navigation will, right at this one boundary, jump to LPD's
+// start (433.075 MHz) before reaching 70cmHam's actual start (430.000 MHz)
+// coming from below. Accepted trade-off; covered by Task 3's tests.
 static const FreqPreset freqPresets[] = {
-    {"15mBC",  1890000,  1902000, STEPS_128, S_STEP_5_0kHz,   MODULATION_AM, BK4819_FILTER_BW_NARROW},
-    {"15mHam", 2100000,  2144990, STEPS_128, S_STEP_1_0kHz,   MODULATION_USB, BK4819_FILTER_BW_NARROWER},
-    {"13mBC",  2145000,  2185000, STEPS_128, S_STEP_5_0kHz,   MODULATION_AM, BK4819_FILTER_BW_NARROW},
-    {"12mHam", 2489000,  2499000, STEPS_128, S_STEP_1_0kHz,   MODULATION_USB, BK4819_FILTER_BW_NARROWER},
-    {"11mBC",  2567000,  2610000, STEPS_128, S_STEP_5_0kHz,   MODULATION_AM, BK4819_FILTER_BW_NARROW},
-    {"CB",     2697500,  2799990, STEPS_128, S_STEP_5_0kHz,   MODULATION_FM, BK4819_FILTER_BW_NARROW},
-    {"10mHam", 2800000,  2970000, STEPS_128, S_STEP_1_0kHz,   MODULATION_USB, BK4819_FILTER_BW_NARROWER},
-    {"6mHam",  5000000,  5400000, STEPS_128, S_STEP_1_0kHz,   MODULATION_USB, BK4819_FILTER_BW_NARROWER},
-    {"AirBand",11800000, 13500000,STEPS_128, S_STEP_100_0kHz, MODULATION_AM, BK4819_FILTER_BW_NARROW},
-    {"2mHam",  14400000, 14800000,STEPS_128, S_STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
-    {"Railway",15175000, 15599990,STEPS_128, S_STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
-    {"Sea",    15600000, 16327500,STEPS_128, S_STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
-    {"Satcom", 24300000, 27000000,STEPS_128, S_STEP_5_0kHz,   MODULATION_FM, BK4819_FILTER_BW_WIDE},
-    {"River1", 30001250, 30051250,STEPS_64,  S_STEP_12_5kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
-    {"River2", 33601250, 33651250,STEPS_64,  S_STEP_12_5kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
-    {"LPD",    43307500, 43477500,STEPS_128, S_STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
-    {"PMR",    44600625, 44620000,STEPS_32,  S_STEP_6_25kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
-    {"FRS 462",46256250, 46272500,STEPS_16,  S_STEP_12_5kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
-    {"FRS 467",46756250, 46771250,STEPS_16,  S_STEP_12_5kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
-    {"LoRaWAN",86400000, 86900000,STEPS_128, S_STEP_100_0kHz, MODULATION_FM, BK4819_FILTER_BW_WIDE},
-    {"GSM-UP", 89000000, 91500000,STEPS_128, S_STEP_100_0kHz, MODULATION_FM, BK4819_FILTER_BW_WIDE},
-    {"GSM-DN", 93500000, 96000000,STEPS_128, S_STEP_100_0kHz, MODULATION_FM, BK4819_FILTER_BW_WIDE},
-    {"23cmHam",124000000,130000000,STEPS_128,S_STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
+#ifdef ENABLE_DE_HAM_BANDS
+    {"17mHam",  1806800,  1816800, STEPS_128, S_STEP_1_0kHz,   MODULATION_USB, BK4819_FILTER_BW_NARROWER},
+#endif
+    {"15mBC",   1890000,  1902000, STEPS_128, S_STEP_5_0kHz,   MODULATION_AM, BK4819_FILTER_BW_NARROW},
+    {"15mHam",  2100000,  2144990, STEPS_128, S_STEP_1_0kHz,   MODULATION_USB, BK4819_FILTER_BW_NARROWER},
+    {"13mBC",   2145000,  2185000, STEPS_128, S_STEP_5_0kHz,   MODULATION_AM, BK4819_FILTER_BW_NARROW},
+    {"12mHam",  2489000,  2499000, STEPS_128, S_STEP_1_0kHz,   MODULATION_USB, BK4819_FILTER_BW_NARROWER},
+    {"11mBC",   2567000,  2610000, STEPS_128, S_STEP_5_0kHz,   MODULATION_AM, BK4819_FILTER_BW_NARROW},
+#ifdef ENABLE_DE_EXTRA_BANDS
+    {"CB",      2656500,  2740500, STEPS_128, S_STEP_5_0kHz,   MODULATION_FM, BK4819_FILTER_BW_NARROW},
+#else
+    {"CB",      2697500,  2799990, STEPS_128, S_STEP_5_0kHz,   MODULATION_FM, BK4819_FILTER_BW_NARROW},
+#endif
+    {"10mHam",  2800000,  2970000, STEPS_128, S_STEP_1_0kHz,   MODULATION_USB, BK4819_FILTER_BW_NARROWER},
+#ifdef ENABLE_DE_HAM_BANDS
+    {"6mHam",   5000000,  5200000, STEPS_128, S_STEP_1_0kHz,   MODULATION_USB, BK4819_FILTER_BW_NARROWER},
+#else
+    {"6mHam",   5000000,  5400000, STEPS_128, S_STEP_1_0kHz,   MODULATION_USB, BK4819_FILTER_BW_NARROWER},
+#endif
+#ifdef ENABLE_DE_EXTRA_BANDS
+    {"Flugfunk",11797500, 13700000,STEPS_128, S_STEP_100_0kHz, MODULATION_AM, BK4819_FILTER_BW_NARROW},
+#else
+    {"AirBand", 11800000, 13500000,STEPS_128, S_STEP_100_0kHz, MODULATION_AM, BK4819_FILTER_BW_NARROW},
+#endif
+#ifdef ENABLE_DE_HAM_BANDS
+    {"2mHam",   14400000, 14600000,STEPS_128, S_STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
+#else
+    {"2mHam",   14400000, 14800000,STEPS_128, S_STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
+#endif
+#ifndef ENABLE_DE_EXTRA_BANDS
+    {"Railway", 15175000, 15599990,STEPS_128, S_STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
+#endif
+#ifdef ENABLE_DE_EXTRA_BANDS
+    {"Seefunk", 15600000, 16202500,STEPS_128, S_STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
+#else
+    {"Sea",     15600000, 16327500,STEPS_128, S_STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
+#endif
+#ifndef ENABLE_DE_EXTRA_BANDS
+    {"Satcom",  24300000, 27000000,STEPS_128, S_STEP_5_0kHz,   MODULATION_FM, BK4819_FILTER_BW_WIDE},
+    {"River1",  30001250, 30051250,STEPS_64,  S_STEP_12_5kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
+    {"River2",  33601250, 33651250,STEPS_64,  S_STEP_12_5kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
+#endif
+#ifdef ENABLE_DE_EXTRA_BANDS
+    {"LPD433",  43307500, 43477500,STEPS_128, S_STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
+#else
+    {"LPD",     43307500, 43477500,STEPS_128, S_STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
+#endif
+#ifdef ENABLE_DE_HAM_BANDS
+    {"70cmHam", 43000000, 44000000,STEPS_128, S_STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
+#endif
+#ifdef ENABLE_DE_EXTRA_BANDS
+    {"PMR446",  44600000, 44620000,STEPS_32,  S_STEP_6_25kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
+#else
+    {"PMR",     44600625, 44620000,STEPS_32,  S_STEP_6_25kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
+#endif
+#ifndef ENABLE_DE_EXTRA_BANDS
+    {"FRS 462", 46256250, 46272500,STEPS_16,  S_STEP_12_5kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
+    {"FRS 467", 46756250, 46771250,STEPS_16,  S_STEP_12_5kHz,  MODULATION_FM, BK4819_FILTER_BW_NARROW},
+#endif
+    {"LoRaWAN", 86400000, 86900000,STEPS_128, S_STEP_100_0kHz, MODULATION_FM, BK4819_FILTER_BW_WIDE},
+#ifndef ENABLE_DE_EXTRA_BANDS
+    {"GSM-UP",  89000000, 91500000,STEPS_128, S_STEP_100_0kHz, MODULATION_FM, BK4819_FILTER_BW_WIDE},
+    {"GSM-DN",  93500000, 96000000,STEPS_128, S_STEP_100_0kHz, MODULATION_FM, BK4819_FILTER_BW_WIDE},
+#endif
+    {"23cmHam",124000000,130000000,STEPS_128, S_STEP_25_0kHz,  MODULATION_FM, BK4819_FILTER_BW_WIDE},
 };
 
 typedef struct SpectrumSettings {

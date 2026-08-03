@@ -43,6 +43,8 @@ ENABLE_BLMIN_TMP_OFF          ?= 0
 ENABLE_SCAN_RANGES            ?= 1
 ENABLE_PREVENT_TX             ?= 0
 ENABLE_ARDF                   ?= 1
+ENABLE_DE_HAM_BANDS           ?= 0
+ENABLE_DE_EXTRA_BANDS         ?= 0
 
 # ---- DEBUGGING ----
 ENABLE_AM_FIX_SHOW_DATA       ?= 0
@@ -381,6 +383,12 @@ ifeq ($(ENABLE_BLMIN_TMP_OFF),1)
 endif
 ifeq ($(ENABLE_SCAN_RANGES),1)
 	CFLAGS  += -DENABLE_SCAN_RANGES
+endif
+ifeq ($(ENABLE_DE_HAM_BANDS),1)
+	CFLAGS  += -DENABLE_DE_HAM_BANDS
+endif
+ifeq ($(ENABLE_DE_EXTRA_BANDS),1)
+	CFLAGS  += -DENABLE_DE_EXTRA_BANDS
 endif
 ifeq ($(ENABLE_PREVENT_TX),1)
 	CFLAGS  += -DENABLE_PREVENT_TX

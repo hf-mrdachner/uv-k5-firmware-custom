@@ -521,6 +521,133 @@ static void test_draw_status_shows_matched_preset_name(void) {
     CHECK(!name_area_has_content_no_match);
 }
 
+static void test_freq_preset_name_buffer_size(void) {
+    printf("\n-- test_freq_preset_name_buffer_size --\n");
+    CHECK(sizeof(freqPresets[0].name) == 12);
+}
+
+// ---------------------------------------------------------------------
+// German band list (ENABLE_DE_HAM_BANDS / ENABLE_DE_EXTRA_BANDS) tests.
+// Only compiled in when the relevant flag is defined -- these assert on
+// names/ranges that only exist under that flag, so they must not run
+// against the default (both-off) table.
+// ---------------------------------------------------------------------
+#if defined(ENABLE_DE_HAM_BANDS) || defined(ENABLE_DE_EXTRA_BANDS)
+// Mirrors DrawStatus()'s matching loop (app/spectrum.c:777-783) without
+// its battery-stub dependency: first array entry whose range contains f.
+static const char *FindMatchingPresetName(uint32_t f) {
+    for (uint8_t i = 0; i < ARRAY_SIZE(freqPresets); ++i) {
+        if (f >= freqPresets[i].fStart && f <= freqPresets[i].fEnd) {
+            return freqPresets[i].name;
+        }
+    }
+    return NULL;
+}
+
+// Like CHECK(strcmp(FindMatchingPresetName(freq), expected) == 0), but
+// guards against FindMatchingPresetName() returning NULL: a plain strcmp()
+// would segfault the whole test binary in that case instead of reporting a
+// clean FAIL, silently skipping every later check in the same run -- exactly
+// the kind of regression this test file exists to catch. Only use this for
+// "should match name X" assertions; the existing
+// CHECK(FindMatchingPresetName(f) == NULL) calls for "should be absent"
+// assertions don't need it.
+#define CHECK_NAME(freq, expected) do { \
+    const char *_name = FindMatchingPresetName(freq); \
+    if (_name == NULL) { \
+        printf("FAIL %s:%d: FindMatchingPresetName(%lu) returned NULL, expected \"%s\"\n", __FILE__, __LINE__, (unsigned long)(freq), expected); \
+        failures++; \
+    } else if (strcmp(_name, expected) != 0) { \
+        printf("FAIL %s:%d: FindMatchingPresetName(%lu) == \"%s\", expected \"%s\"\n", __FILE__, __LINE__, (unsigned long)(freq), _name, expected); \
+        failures++; \
+    } else { \
+        printf("ok   FindMatchingPresetName(%lu) == \"%s\"\n", (unsigned long)(freq), expected); \
+    } \
+} while (0)
+#endif
+
+#ifdef ENABLE_DE_HAM_BANDS
+static void test_de_ham_bands(void) {
+    printf("\n-- test_de_ham_bands --\n");
+
+    // 17mHam: new entry, absent from the international table.
+    CHECK_NAME(1810000, "17mHam"); // 18.10 MHz
+
+    // 70cmHam: new entry, the original point of this feature.
+    CHECK_NAME(43550000, "70cmHam"); // 435.50 MHz, outside LPD433's slice
+
+    // 70cmHam boundary: range is 43000000-44000000.
+    CHECK_NAME(43000000, "70cmHam"); // in: exact fStart
+    CHECK_NAME(44000000, "70cmHam"); // in: exact fEnd
+    CHECK(FindMatchingPresetName(42999999) == NULL); // out: one below fStart
+    CHECK(FindMatchingPresetName(44000001) == NULL); // out: one above fEnd
+
+    // 2mHam narrowed to the German 144-146 MHz allocation (was 144-148).
+    CHECK(FindMatchingPresetName(14700000) == NULL); // 147.0 MHz, inside the old int'l range, outside the new German one
+
+    // 6mHam narrowed to the German 50-52 MHz allocation (was 50-54).
+    CHECK(FindMatchingPresetName(5300000) == NULL); // 53.0 MHz, same story
+
+    // LPD/LPD433 must win over 70cmHam inside LPD's slice (documented
+    // ordering exception -- see Task 2's array comment).
+#ifdef ENABLE_DE_EXTRA_BANDS
+    CHECK_NAME(43350000, "LPD433"); // 433.50 MHz
+#else
+    CHECK_NAME(43350000, "LPD");
+#endif
+}
+#endif
+
+#ifdef ENABLE_DE_EXTRA_BANDS
+static void test_de_extra_bands(void) {
+    printf("\n-- test_de_extra_bands --\n");
+
+    // CB widened to the full German 80-channel allocation (26.565-27.405 MHz).
+    CHECK_NAME(2660000, "CB"); // 26.60 MHz -- inside new CB, outside old (26.975-28.00)
+
+    // CB boundary: range is 2656500-2740500.
+    CHECK_NAME(2656500, "CB"); // in: exact fStart
+    CHECK_NAME(2740500, "CB"); // in: exact fEnd
+    CHECK(FindMatchingPresetName(2656499) == NULL); // out: one below fStart
+    CHECK(FindMatchingPresetName(2740501) == NULL); // out: one above fEnd
+
+    // AirBand renamed "Flugfunk" and widened to the ICAO edges (117.975-137.000 MHz).
+    CHECK_NAME(11798000, "Flugfunk"); // 117.98 MHz -- inside new, outside old (118.00-135.00)
+
+    // Flugfunk boundary: range is 11797500-13700000.
+    CHECK_NAME(11797500, "Flugfunk"); // in: exact fStart
+    CHECK_NAME(13700000, "Flugfunk"); // in: exact fEnd
+    CHECK(FindMatchingPresetName(11797499) == NULL); // out: one below fStart
+    CHECK(FindMatchingPresetName(13700001) == NULL); // out: one above fEnd
+
+    // Sea/River1/River2 consolidated into one "Seefunk" entry.
+    CHECK_NAME(15700000, "Seefunk"); // 157.0 MHz
+
+    // Seefunk boundary: range is 15600000-16202500.
+    CHECK_NAME(15600000, "Seefunk"); // in: exact fStart
+    CHECK_NAME(16202500, "Seefunk"); // in: exact fEnd
+    CHECK(FindMatchingPresetName(15599999) == NULL); // out: one below fStart
+    CHECK(FindMatchingPresetName(16202501) == NULL); // out: one above fEnd
+
+    // PMR renamed "PMR446".
+    CHECK_NAME(44610000, "PMR446"); // 446.10 MHz
+
+    // PMR446 boundary: range is 44600000-44620000.
+    CHECK_NAME(44600000, "PMR446"); // in: exact fStart
+    CHECK_NAME(44620000, "PMR446"); // in: exact fEnd
+    CHECK(FindMatchingPresetName(44599999) == NULL); // out: one below fStart
+    CHECK(FindMatchingPresetName(44620001) == NULL); // out: one above fEnd
+
+    // Railway, Satcom, River1, River2, FRS 462/467, GSM-UP/DN dropped entirely.
+    CHECK(FindMatchingPresetName(15300000) == NULL); // 153.0 MHz, old Railway range
+    CHECK(FindMatchingPresetName(25000000) == NULL); // 250.0 MHz, old Satcom range
+    CHECK(FindMatchingPresetName(30020000) == NULL); // 300.20 MHz, old River1 range
+    CHECK(FindMatchingPresetName(33620000) == NULL); // 336.20 MHz, old River2 range
+    CHECK(FindMatchingPresetName(46260000) == NULL); // 462.60 MHz, old FRS 462 range
+    CHECK(FindMatchingPresetName(90000000) == NULL); // 900.0 MHz, old GSM-UP range
+}
+#endif
+
 int main(void) {
     test_key3_key9_selects_nearest_preset();
     test_still_screen_no_collision();
@@ -534,6 +661,13 @@ int main(void) {
     test_wide_scan_range_measures_past_128_steps();
 #endif
     test_draw_status_shows_matched_preset_name();
+    test_freq_preset_name_buffer_size();
+#ifdef ENABLE_DE_HAM_BANDS
+    test_de_ham_bands();
+#endif
+#ifdef ENABLE_DE_EXTRA_BANDS
+    test_de_extra_bands();
+#endif
 
     printf("\n%s (%d failure%s)\n", failures ? "FAILED" : "PASSED",
            failures, failures == 1 ? "" : "s");
