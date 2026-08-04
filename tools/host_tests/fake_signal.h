@@ -29,4 +29,11 @@ extern int fake_rssi_profile_pos;
 // gain around a scan, not as evidence such a test already exists.
 extern bool fake_agc_enabled;
 
+// Set by the RADIO_SetupAGC() stub to the `disable` arg it was last called
+// with -- i.e. what app/spectrum.c itself requested, one layer above
+// fake_agc_enabled (radio.c's own translation of that request into actual
+// BK4819_SetAGC() calls isn't compiled for host tests). Read by
+// test_agc_frozen_during_scan in test_spectrum.c.
+extern bool fake_setupagc_disable_last;
+
 #endif

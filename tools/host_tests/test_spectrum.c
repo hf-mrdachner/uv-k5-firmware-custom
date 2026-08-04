@@ -186,6 +186,54 @@ static void test_spectrum_scan_finds_peak(void) {
 }
 
 // ---------------------------------------------------------------------
+// Regression test: AGC must be frozen (RADIO_SetupAGC's `disable` arg
+// true) while the spectrum sweep is actively retuning across frequencies,
+// and released again once a peak is found and RX settles on it to listen.
+// Reported on real hardware as a signal reading "super wide" across many
+// adjacent frequency bins instead of confined to the one it's actually on
+// -- BK4819's automatic AGC continuously re-normalizing gain in response
+// to whatever frequency the fast per-step sweep last landed on doesn't
+// keep up with the sweep rate, so a strong signal's neighboring (empty)
+// bins inherit its gain state and read elevated too.
+//
+// This exact bug (and fix) previously existed in app/spectrum.c (commit
+// 679f8f3, "Fix spectrum analyzer band-switch, S-meter overlap, and frozen
+// AGC") but was silently lost when the file was wholesale-replaced with
+// egzumer's own implementation right after (commit 64f7cc8) -- that
+// version's ToggleRX() calls RADIO_SetupAGC(on, lockAGC), and lockAGC only
+// ever becomes true via the manual STILL-screen register menu, never
+// during an ordinary automatic scan.
+// ---------------------------------------------------------------------
+static void test_agc_frozen_during_scan(void) {
+    printf("\n-- test_agc_frozen_during_scan --\n");
+
+    settings.stepsCount = STEPS_64;
+    settings.rssiTriggerLevel = RSSI_MAX_VALUE; // stay in SPECTRUM scan, don't divert into listening
+    currentFreq = 14500000; // 145.00000 MHz
+    settings.scanStepIndex = S_STEP_25_0kHz;
+    lockAGC = false;
+    uint16_t n = GetStepsCount();
+
+    uint16_t profile[FAKE_RSSI_PROFILE_MAX];
+    for (int i = 0; i <= n; i++) profile[i] = 300; // flat noise floor, no peak
+
+    run_fake_sweep(profile, n);
+
+    CHECK(fake_setupagc_disable_last == true); // AGC frozen throughout the sweep
+
+    // Now let a peak be found and RX settle on it (ToggleRX(true)):
+    // AGC must go dynamic again for accurate demodulated audio.
+    ResetPeak();
+    scanInfo.rssi = 500;
+    scanInfo.f = currentFreq;
+    scanInfo.i = 0;
+    UpdatePeakInfoForce();
+    ToggleRX(true);
+
+    CHECK(fake_setupagc_disable_last == false); // AGC released while actually listening
+}
+
+// ---------------------------------------------------------------------
 // Reusable fixture: dump a framebuffer row as ASCII, one line per bit
 // (screen y = 8 + row*8 + bit), for visually inspecting collisions between
 // draw calls that share a row. Not a test by itself -- use it from a
@@ -652,6 +700,7 @@ int main(void) {
     test_key3_key9_selects_nearest_preset();
     test_still_screen_no_collision();
     test_spectrum_scan_finds_peak();
+    test_agc_frozen_during_scan();
     test_spectrum_arrow_text_collision();
     test_automatic_preset_choose_matches_near_band_edge();
     test_get_preset_match_frequency_returns_raw_vfo_frequency();

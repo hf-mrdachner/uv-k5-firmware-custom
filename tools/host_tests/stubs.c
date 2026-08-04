@@ -94,7 +94,8 @@ void BK4819_SetFilterBandwidth(const BK4819_FilterBandwidth_t Bandwidth, const b
 void RADIO_SetModulation(ModulationMode_t m) { (void)m; }
 void RADIO_SendEndOfTransmission(void) {}
 void RADIO_SendCssTail(void) {}
-void RADIO_SetupAGC(bool listeningAM, bool disable) { (void)listeningAM; (void)disable; }
+bool fake_setupagc_disable_last = false; // tracks the `disable` arg RADIO_SetupAGC was last called with
+void RADIO_SetupAGC(bool listeningAM, bool disable) { (void)listeningAM; fake_setupagc_disable_last = disable; }
 // TX_freq_check: real implementation from frequencies.c is compiled in --
 // no hardware dependency, no need to fake it.
 
