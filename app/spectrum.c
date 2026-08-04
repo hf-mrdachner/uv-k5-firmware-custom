@@ -386,7 +386,16 @@ static void ToggleRX(bool on) {
     ToggleTX(false);
   }
 
-  RADIO_SetupAGC(on, lockAGC);
+  // Freeze AGC (disable=true) whenever RX is off, i.e. while the sweep is
+  // actively retuning across frequencies -- BK4819's automatic AGC can't
+  // keep up with the per-step retune rate, so a strong signal's gain
+  // reduction bleeds into neighboring (empty) bins and reads as a signal
+  // "smeared" across many frequencies instead of confined to one (reported
+  // on real hardware, previously fixed in commit 679f8f3, silently lost
+  // when app/spectrum.c was replaced wholesale in 64f7cc8). Once RX turns
+  // on to actually listen to a found peak, let AGC go dynamic again unless
+  // the user has manually locked it via the STILL-screen register menu.
+  RADIO_SetupAGC(on, lockAGC || !on);
   BK4819_ToggleGpioOut(BK4819_GPIO6_PIN2_GREEN, on);
 
   ToggleAudio(on);
